@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "python-hddb"
+version = "0.1.0"
+description = ""
+authors = ["David Daza <03dazal@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+duckdb = "^1.0.0"
+pandas = "^2.2.2"
+loguru = "^0.7.2"
+python-dotenv = "^1.0.1"
+pytest = "^8.3.2"
+
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.6.2"
+pytest = "^8.3.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
