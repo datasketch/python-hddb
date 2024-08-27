@@ -1,11 +1,11 @@
 import os
+from functools import wraps
 from typing import Any, List, Optional
 
 import duckdb
 import pandas as pd
 from dotenv import load_dotenv
 from loguru import logger
-from functools import wraps
 
 from .exceptions import ConnectionError, QueryError
 
@@ -33,7 +33,7 @@ class HdDB:
     def execute(
         self, query: str, parameters: Optional[List[Any]] = None
     ) -> duckdb.DuckDBPyConnection:
-        self.conn.execute(query, parameters)
+        return self.conn.execute(query, parameters)
 
     def create_database(self, dataframes: List[pd.DataFrame], names: List[str]):
         """
