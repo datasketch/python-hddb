@@ -89,7 +89,7 @@ class HdDB:
         try:
             # https://motherduck.com/docs/key-tasks/loading-data-into-motherduck/loading-duckdb-database/
             self.execute(
-                f"CREATE OR REPLACE DATABASE {org}__{db} from CURRENT_DATABASE();",
+                f"CREATE OR REPLACE DATABASE \"{org}__{db}\" from CURRENT_DATABASE();",
             )
         except duckdb.Error as e:
             logger.error(f"Error uploading database to MotherDuck: {e}")
