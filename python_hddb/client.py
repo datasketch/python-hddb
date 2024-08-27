@@ -4,14 +4,9 @@ from typing import Any, List, Optional
 
 import duckdb
 import pandas as pd
-from dotenv import load_dotenv
 from loguru import logger
 
 from .exceptions import ConnectionError, QueryError
-
-load_dotenv()
-
-os.environ["motherduck_token"] = os.environ["MOTHERDUCK_TOKEN"]
 
 
 def attach_motherduck(func):
@@ -24,11 +19,16 @@ def attach_motherduck(func):
 
 
 class HdDB:
-    def __init__(self, read_only=False):
+    def __init__(self, motherduck_token="", read_only=False):
         try:
+            if motherduck_token:
+                os.environ["motherduck_token"] = motherduck_token
             self.conn = duckdb.connect(":memory:", read_only=read_only)
         except duckdb.Error as e:
             raise ConnectionError(f"Failed to connect to database: {e}")
+
+    def set_motherduck_token(self, motherduck_token: str):
+        os.environ["motherduck_token"] = motherduck_token
 
     def execute(
         self, query: str, parameters: Optional[List[Any]] = None
