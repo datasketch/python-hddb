@@ -51,12 +51,32 @@ class HdDB:
 
         try:
             # self.conn.execute("CREATE TABLE hd_fields ();")
-            # self.conn.execute("CREATE TABLE hd_tables (id TEXT, name TEXT, slug TEXT);")
             for df, table_name in zip(dataframes, names):
                 query = f"CREATE TABLE {table_name} AS SELECT * FROM df"
                 self.execute(query)
+            self.create_hd_tables()
+            self.create_hd_fields()
         except duckdb.Error as e:
             raise QueryError(f"Error executing query: {e}")
+
+    def create_hd_tables(self):
+        try:
+            self.execute(
+                "CREATE TABLE hd_tables AS SELECT table_name AS id, table_name AS label, estimated_size AS nrow, column_count AS ncol from duckdb_tables();"
+            )
+        except duckdb.Error as e:
+            logger.error(f"Error creating hd_tables: {e}")
+            raise QueryError(f"Error creating hd_tables: {e}")
+
+    # TODO: map duckdb data types to datasketch types
+    def create_hd_fields(self):
+        try:
+            self.execute(
+                "CREATE TABLE hd_fields AS SELECT  column_name AS id, column_name AS label, table_name AS table, data_type AS type from duckdb_columns();"
+            )
+        except duckdb.Error as e:
+            logger.error(f"Error creating hd_fields: {e}")
+            raise QueryError(f"Error creating hd_fields: {e}")
 
     @attach_motherduck
     def upload_to_motherduck(self, org: str, db: str):
