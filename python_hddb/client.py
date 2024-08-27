@@ -5,10 +5,22 @@ import duckdb
 import pandas as pd
 from dotenv import load_dotenv
 from loguru import logger
+from functools import wraps
 
 from .exceptions import ConnectionError, QueryError
 
 load_dotenv()
+
+os.environ["motherduck_token"] = os.environ["MOTHERDUCK_TOKEN"]
+
+
+def attach_motherduck(func):
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        self.execute("ATTACH 'md:'")
+        return func(self, *args, **kwargs)
+
+    return wrapper
 
 
 class HdDB:
@@ -21,11 +33,7 @@ class HdDB:
     def execute(
         self, query: str, parameters: Optional[List[Any]] = None
     ) -> duckdb.DuckDBPyConnection:
-        try:
-            return self.conn.execute(query, parameters)
-        except duckdb.Error as e:
-            logger.error(f"Error executing query: {e}")
-            raise QueryError(f"Error executing query: {e}")
+        self.conn.execute(query, parameters)
 
     def create_database(self, dataframes: List[pd.DataFrame], names: List[str]):
         """
@@ -50,20 +58,42 @@ class HdDB:
         except duckdb.Error as e:
             raise QueryError(f"Error executing query: {e}")
 
+    @attach_motherduck
     def upload_to_motherduck(self, org: str, db: str):
         """
         Upload the current database to Motherduck
         """
-        os.environ["motherduck_token"] = os.environ["MOTHERDUCK_TOKEN"]
-        if not os.environ["motherduck_token"]:
+        if not os.environ.get("motherduck_token"):
             raise ValueError("Motherduck token has not been set")
-        
+
         try:
-            self.conn.execute("INSTALL motherduck; LOAD motherduck;")
-            self.conn.execute(f"EXPORT DATABASE '{org}__{db}'")
+            # https://motherduck.com/docs/key-tasks/loading-data-into-motherduck/loading-duckdb-database/
+            self.execute(
+                f"CREATE OR REPLACE DATABASE {org}__{db} from CURRENT_DATABASE();",
+            )
         except duckdb.Error as e:
             logger.error(f"Error uploading database to MotherDuck: {e}")
             raise ConnectionError(f"Error uploading database to MotherDuck: {e}")
+
+    @attach_motherduck
+    def drop_database(self, org: str, db: str):
+        """
+        Delete a database stored in Motherduck
+
+        :param org: Organization name
+        :param db: Database name
+        :raises ValueError: If Motherduck token is not set
+        :raises ConnectionError: If there's an error deleting the database from Motherduck
+        """
+        if not os.environ.get("motherduck_token"):
+            raise ValueError("Motherduck token has not been set")
+
+        try:
+            self.execute(f"DROP DATABASE {org}__{db};")
+            logger.info(f"Database {org}__{db} successfully deleted from Motherduck")
+        except duckdb.Error as e:
+            logger.error(f"Error deleting database from MotherDuck: {e}")
+            raise ConnectionError(f"Error deleting database from MotherDuck: {e}")
 
     def close(self):
         try:
