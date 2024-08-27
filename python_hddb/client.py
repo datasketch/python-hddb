@@ -57,10 +57,13 @@ class HdDB:
         os.environ["motherduck_token"] = os.environ["MOTHERDUCK_TOKEN"]
         if not os.environ["motherduck_token"]:
             raise ValueError("Motherduck token has not been set")
-        
+
         try:
-            self.conn.execute("INSTALL motherduck; LOAD motherduck;")
-            self.conn.execute(f"EXPORT DATABASE '{org}__{db}'")
+            # https://motherduck.com/docs/key-tasks/loading-data-into-motherduck/loading-duckdb-database/
+            self.execute("ATTACH 'md:'")
+            self.execute(
+                f"CREATE OR REPLACE DATABASE {org}__{db} from CURRENT_DATABASE();",
+            )
         except duckdb.Error as e:
             logger.error(f"Error uploading database to MotherDuck: {e}")
             raise ConnectionError(f"Error uploading database to MotherDuck: {e}")
