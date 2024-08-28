@@ -13,6 +13,8 @@ from .helpers import generate_field_metadata
 def attach_motherduck(func):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
+        if not os.environ.get("motherduck_token"):
+            raise ValueError("Motherduck token has not been set")
         self.execute("ATTACH 'md:'")
         return func(self, *args, **kwargs)
 
@@ -124,11 +126,7 @@ class HdDB:
         """
         Upload the current database to Motherduck
         """
-        if not os.environ.get("motherduck_token"):
-            raise ValueError("Motherduck token has not been set")
-
         try:
-            # https://motherduck.com/docs/key-tasks/loading-data-into-motherduck/loading-duckdb-database/
             self.execute(
                 f'CREATE OR REPLACE DATABASE "{org}__{db}" from CURRENT_DATABASE();',
             )
@@ -143,18 +141,43 @@ class HdDB:
 
         :param org: Organization name
         :param db: Database name
-        :raises ValueError: If Motherduck token is not set
         :raises ConnectionError: If there's an error deleting the database from Motherduck
         """
-        if not os.environ.get("motherduck_token"):
-            raise ValueError("Motherduck token has not been set")
-
         try:
             self.execute(f'DROP DATABASE "{org}__{db}";')
             logger.info(f"Database {org}__{db} successfully deleted from Motherduck")
         except duckdb.Error as e:
             logger.error(f"Error deleting database from MotherDuck: {e}")
             raise ConnectionError(f"Error deleting database from MotherDuck: {e}")
+
+    @attach_motherduck
+    def get_data(self, org: str, db: str, tbl: str) -> dict:
+        """
+        Retrieve data and field information from a specified table in Motherduck
+
+        :param org: Organization name
+        :param db: Database name
+        :param tbl: Table name
+        :return: Dictionary containing 'data' and 'fields' properties as JSON objects
+        :raises ConnectionError: If there's an error retrieving data from Motherduck
+        """
+        try:
+            # Fetch data from the specified table
+            data_query = f'SELECT * FROM "{org}__{db}"."{tbl}"'
+            data = self.execute(data_query).fetchdf()
+
+            # Fetch field information
+            fields_query = f'SELECT * FROM "{org}__{db}".hd_fields WHERE tbl = ?'
+            fields = self.execute(fields_query, [tbl]).fetchdf()
+
+            # Convert DataFrames to JSON objects
+            data_json = data.to_json(orient='records')
+            fields_json = fields.to_json(orient='records')
+
+            return {"data": data_json, "fields": fields_json}
+        except duckdb.Error as e:
+            logger.error(f"Error retrieving data from MotherDuck: {e}")
+            raise ConnectionError(f"Error retrieving data from MotherDuck: {e}")
 
     def close(self):
         try:

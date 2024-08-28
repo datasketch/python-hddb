@@ -1,5 +1,7 @@
 import pytest
+
 from python_hddb.client import HdDB
+
 
 @pytest.fixture
 def db_client():
