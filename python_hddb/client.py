@@ -1,12 +1,13 @@
 import os
 from functools import wraps
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 import duckdb
 import pandas as pd
 from loguru import logger
 
 from .exceptions import ConnectionError, QueryError
+from .helpers import generate_field_metadata
 
 
 def attach_motherduck(func):
@@ -50,14 +51,64 @@ class HdDB:
             )
 
         try:
-            # self.conn.execute("CREATE TABLE hd_fields ();")
+            all_metadata = []
             for df, table_name in zip(dataframes, names):
-                query = f"CREATE TABLE {table_name} AS SELECT * FROM df"
+                metadata = generate_field_metadata(df)
+                
+                # Create a mapping of original column names to new IDs
+                columns = {field['label']: field['id'] for field in metadata}
+                
+                # Rename the columns in the DataFrame
+                df_renamed = df.rename(columns=columns)
+                
+                # Create the table with renamed columns
+                query = f"CREATE TABLE {table_name} AS SELECT * FROM df_renamed"
                 self.execute(query)
+                
+                for field in metadata:
+                    field["table"] = table_name
+                all_metadata.extend(metadata)
+
             self.create_hd_tables()
-            self.create_hd_fields()
+            self.create_hd_fields(all_metadata)
         except duckdb.Error as e:
             raise QueryError(f"Error executing query: {e}")
+
+    # TODO: map duckdb data types to datasketch types
+    def create_hd_fields(self, metadata: List[Dict[str, str]]):
+        try:
+            # Create a temporary table with the metadata
+            self.execute(
+                "CREATE TEMP TABLE temp_metadata (fld__id VARCHAR, id VARCHAR, label VARCHAR, tbl VARCHAR)"
+            )
+            for field in metadata:
+                self.execute(
+                    "INSERT INTO temp_metadata VALUES (?, ?, ?, ?)",
+                    (field["fld__id"], field["id"], field["label"], field["table"]),
+                )
+
+            # Join the temporary table with information_schema.columns
+            self.execute("""
+                CREATE TABLE hd_fields AS 
+                SELECT 
+                    tm.fld__id, 
+                    tm.id, 
+                    tm.label, 
+                    ic.table_name AS tbl, 
+                    ic.data_type AS type
+                FROM 
+                    temp_metadata tm
+                JOIN 
+                    information_schema.columns ic 
+                ON 
+                    tm.tbl = ic.table_name AND tm.id = ic.column_name
+            """)
+
+            # Drop the temporary table
+            self.execute("DROP TABLE temp_metadata")
+        except duckdb.Error as e:
+            logger.error(f"Error creating hd_fields: {e}")
+            raise QueryError(f"Error creating hd_fields: {e}")
 
     def create_hd_tables(self):
         try:
@@ -67,16 +118,6 @@ class HdDB:
         except duckdb.Error as e:
             logger.error(f"Error creating hd_tables: {e}")
             raise QueryError(f"Error creating hd_tables: {e}")
-
-    # TODO: map duckdb data types to datasketch types
-    def create_hd_fields(self):
-        try:
-            self.execute(
-                "CREATE TABLE hd_fields AS SELECT  column_name AS id, column_name AS label, table_name AS table, data_type AS type from information_schema.columns WHERE table_name IN (SELECT id from hd_tables);"
-            )
-        except duckdb.Error as e:
-            logger.error(f"Error creating hd_fields: {e}")
-            raise QueryError(f"Error creating hd_fields: {e}")
 
     @attach_motherduck
     def upload_to_motherduck(self, org: str, db: str):
@@ -89,7 +130,7 @@ class HdDB:
         try:
             # https://motherduck.com/docs/key-tasks/loading-data-into-motherduck/loading-duckdb-database/
             self.execute(
-                f"CREATE OR REPLACE DATABASE \"{org}__{db}\" from CURRENT_DATABASE();",
+                f'CREATE OR REPLACE DATABASE "{org}__{db}" from CURRENT_DATABASE();',
             )
         except duckdb.Error as e:
             logger.error(f"Error uploading database to MotherDuck: {e}")
