@@ -72,7 +72,7 @@ class HdDB:
     def create_hd_fields(self):
         try:
             self.execute(
-                "CREATE TABLE hd_fields AS SELECT  column_name AS id, column_name AS label, table_name AS table, data_type AS type from information_schema.columns;"
+                "CREATE TABLE hd_fields AS SELECT  column_name AS id, column_name AS label, table_name AS table, data_type AS type from information_schema.columns WHERE table_name IN (SELECT id from hd_tables);"
             )
         except duckdb.Error as e:
             logger.error(f"Error creating hd_fields: {e}")
