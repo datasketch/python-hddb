@@ -54,17 +54,17 @@ class HdDB:
             all_metadata = []
             for df, table_name in zip(dataframes, names):
                 metadata = generate_field_metadata(df)
-                
+
                 # Create a mapping of original column names to new IDs
-                columns = {field['label']: field['id'] for field in metadata}
-                
+                columns = {field["label"]: field["id"] for field in metadata}
+
                 # Rename the columns in the DataFrame
                 df_renamed = df.rename(columns=columns)
-                
+
                 # Create the table with renamed columns
                 query = f"CREATE TABLE {table_name} AS SELECT * FROM df_renamed"
                 self.execute(query)
-                
+
                 for field in metadata:
                     field["table"] = table_name
                 all_metadata.extend(metadata)
@@ -150,7 +150,7 @@ class HdDB:
             raise ValueError("Motherduck token has not been set")
 
         try:
-            self.execute(f"DROP DATABASE {org}__{db};")
+            self.execute(f'DROP DATABASE "{org}__{db}";')
             logger.info(f"Database {org}__{db} successfully deleted from Motherduck")
         except duckdb.Error as e:
             logger.error(f"Error deleting database from MotherDuck: {e}")
