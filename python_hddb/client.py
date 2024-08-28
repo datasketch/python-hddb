@@ -174,8 +174,8 @@ class HdDB:
             fields = self.execute(fields_query, [tbl]).fetchdf()
 
             # Convert DataFrames to JSON objects
-            data_json = data.to_json(orient="records")
-            fields_json = fields.to_json(orient="records")
+            data_json = data.to_dict(orient="records")
+            fields_json = fields.to_dict(orient="records")
 
             return {"data": data_json, "fields": fields_json}
         except duckdb.Error as e:
