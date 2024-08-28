@@ -1,6 +1,7 @@
+import json
 import os
 from functools import wraps
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Generator, List, Optional
 
 import duckdb
 import pandas as pd
@@ -171,10 +172,40 @@ class HdDB:
             fields = self.execute(fields_query, [tbl]).fetchdf()
 
             # Convert DataFrames to JSON objects
-            data_json = data.to_json(orient='records')
-            fields_json = fields.to_json(orient='records')
+            data_json = data.to_json(orient="records")
+            fields_json = fields.to_json(orient="records")
 
             return {"data": data_json, "fields": fields_json}
+        except duckdb.Error as e:
+            logger.error(f"Error retrieving data from MotherDuck: {e}")
+            raise ConnectionError(f"Error retrieving data from MotherDuck: {e}")
+
+    @attach_motherduck
+    def get_data_stream(
+        self, org: str, db: str, tbl: str
+    ) -> Generator[Dict[str, Any], None, None]:
+        """
+        Retrieve data and field information from a specified table in Motherduck as a stream
+
+        :param org: Organization name
+        :param db: Database name
+        :param tbl: Table name
+        :return: Generator yielding dictionaries containing 'data' and 'fields'
+        :raises ConnectionError: If there's an error retrieving data from Motherduck
+        """
+        try:
+            # Fetch field information first
+            fields_query = f'SELECT * FROM "{org}__{db}".hd_fields WHERE tbl = ?'
+            fields = self.execute(fields_query, [tbl]).fetchdf()
+            fields_json = fields.to_json(orient="records")
+
+            # Fetch data from the specified table in chunks
+            data_query = f'SELECT * FROM "{org}__{db}"."{tbl}"'
+            chunk_size = 1000  # Adjust this value based on your needs
+
+            for chunk in self.execute(data_query).fetch_df_chunk(chunk_size=chunk_size):
+                data_json = chunk.to_json(orient="records")
+                yield {"data": json.loads(data_json), "fields": json.loads(fields_json)}
         except duckdb.Error as e:
             logger.error(f"Error retrieving data from MotherDuck: {e}")
             raise ConnectionError(f"Error retrieving data from MotherDuck: {e}")
