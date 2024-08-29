@@ -240,10 +240,10 @@ class HdDB:
                 self.execute(f'CREATE TABLE "{org}__{db}"."{tbl}" AS SELECT * FROM df')
 
                 # Insert into hd_tables
-                # self.execute(
-                #     f'INSERT INTO "{org}__{db}".hd_tables (id, label, nrow, ncol) VALUES (?, ?, ?, ?)',
-                #     [tbl, tbl, len(df), len(df.columns)],
-                # )
+                self.execute(
+                    f'INSERT INTO "{org}__{db}".hd_tables (id, label, nrow, ncol) VALUES (?, ?, ?, ?)',
+                    [tbl, tbl, len(df), len(df.columns)],
+                )
 
                 # self.execute(
                 #     "CREATE TEMP TABLE temp_metadata (fld__id VARCHAR, id VARCHAR, label VARCHAR, tbl VARCHAR)"
