@@ -218,7 +218,7 @@ class HdDB:
             raise ConnectionError(f"Error deleting table from MotherDuck: {e}")
 
     @attach_motherduck
-    def add_table(self, org: str, db: str, tbl: str, df: pd.DataFrame):
+    def add_table(self, org: str, db: str, df: pd.DataFrame, tbl: str):
         """
         Adds a new table to an existing database in MotherDuck and registers it in hd_tables and hd_fields.
 
@@ -245,24 +245,37 @@ class HdDB:
                     [tbl, tbl, len(df), len(df.columns)],
                 )
 
-                # Insertar directamente en hd_fields sin usar una tabla temporal
+                self.execute(
+                    "CREATE TEMP TABLE temp_metadata (fld__id VARCHAR, id VARCHAR, label VARCHAR, tbl VARCHAR)"
+                )
+
+                for field in metadata:
+                    self.execute(
+                        "INSERT INTO temp_metadata VALUES (?, ?, ?, ?)",
+                        (field["fld__id"], field["id"], field["label"], field["table"]),
+                    )
+
+                # Insertar en hd_fields usando una consulta JOIN
                 self.execute(
                     f"""
                 INSERT INTO "{org}__{db}".hd_fields (fld__id, id, label, tbl, type)
                 SELECT 
-                    m.fld__id, 
-                    m.id, 
-                    m.label, 
+                    tm.fld__id, 
+                    tm.id, 
+                    tm.label, 
                     '{tbl}' AS tbl, 
                     ic.data_type AS type
                 FROM 
-                    (SELECT * FROM pd.DataFrame(metadata)) AS m
+                    temp_metadata tm
                 JOIN 
                     information_schema.columns ic 
                 ON 
-                    '{tbl}' = ic.table_name AND m.id = ic.column_name
+                    '{tbl}' = ic.table_name AND tm.id = ic.column_name
                 """
                 )
+
+                # Eliminar la tabla temporal
+                self.execute("DROP TABLE temp_metadata")
 
                 # Commit transaction
                 self.execute("COMMIT;")
