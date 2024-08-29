@@ -214,8 +214,69 @@ class HdDB:
                 f"Table {tbl} successfully deleted from database {org}__{db} in Motherduck and its record in hd_data has been removed"
             )
         except duckdb.Error as e:
-            logger.error(f"Error al eliminar la tabla de MotherDuck: {e}")
-            raise ConnectionError(f"Error al eliminar la tabla de MotherDuck: {e}")
+            logger.error(f"Error deleting table from MotherDuck: {e}")
+            raise ConnectionError(f"Error deleting table from MotherDuck: {e}")
+
+    @attach_motherduck
+    def add_table(self, org: str, db: str, tbl: str, df: pd.DataFrame):
+        """
+        Adds a new table to an existing database in MotherDuck and registers it in hd_tables and hd_fields.
+
+        :param org: Organization name
+        :param db: Database name
+        :param df: Pandas DataFrame containing the data to be added
+        :param table_name: Name of the new table
+        :raises ConnectionError: If there's an error adding the table to MotherDuck
+        """
+        try:
+            # Generate metadata for the new table
+            metadata = generate_field_metadata(df)
+
+            # Begin transaction
+            self.execute("BEGIN TRANSACTION;")
+
+            try:
+                # Create the new table
+                self.execute(f'CREATE TABLE "{org}__{db}"."{tbl}" AS SELECT * FROM df')
+
+                # Insert into hd_tables
+                self.execute(
+                    f'INSERT INTO "{org}__{db}".hd_tables (id, label, nrow, ncol) VALUES (?, ?, ?, ?)',
+                    [tbl, tbl, len(df), len(df.columns)],
+                )
+
+                # Insertar directamente en hd_fields sin usar una tabla temporal
+                self.execute(
+                    f"""
+                INSERT INTO "{org}__{db}".hd_fields (fld__id, id, label, tbl, type)
+                SELECT 
+                    m.fld__id, 
+                    m.id, 
+                    m.label, 
+                    '{tbl}' AS tbl, 
+                    ic.data_type AS type
+                FROM 
+                    (SELECT * FROM pd.DataFrame(metadata)) AS m
+                JOIN 
+                    information_schema.columns ic 
+                ON 
+                    '{tbl}' = ic.table_name AND m.id = ic.column_name
+                """
+                )
+
+                # Commit transaction
+                self.execute("COMMIT;")
+
+                logger.info(
+                    f"Table {tbl} successfully added to database {org}__{db} in MotherDuck"
+                )
+            except Exception as e:
+                # Rollback in case of error
+                self.execute("ROLLBACK;")
+                raise e
+        except duckdb.Error as e:
+            logger.error(f"Error adding table to MotherDuck: {e}")
+            raise ConnectionError(f"Error adding table to MotherDuck: {e}")
 
     def close(self):
         try:
