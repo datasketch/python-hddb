@@ -7,7 +7,7 @@ import duckdb
 import pandas as pd
 from loguru import logger
 
-from .exceptions import ConnectionError, QueryError
+from .exceptions import ConnectionError, QueryError, TableExistsError
 from .helpers import generate_field_metadata
 
 
@@ -232,62 +232,74 @@ class HdDB:
             # Generate metadata for the new table
             metadata = generate_field_metadata(df)
 
+            # Create a mapping of original column names to new IDs
+            columns = {field["label"]: field["id"] for field in metadata}
+
+            # Rename the columns in the DataFrame
+            df_renamed = df.rename(columns=columns)
+
             # Begin transaction
             self.execute("BEGIN TRANSACTION;")
 
-            try:
-                # Create the new table
-                self.execute(f'CREATE TABLE "{org}__{db}"."{tbl}" AS SELECT * FROM df')
+            # Create the new table
+            self.execute(
+                f'CREATE TABLE "{org}__{db}"."{tbl}" AS SELECT * FROM df_renamed'
+            )
 
-                # Insert into hd_tables
+            # Insert into hd_tables
+            self.execute(
+                f'INSERT INTO "{org}__{db}".hd_tables (id, label, nrow, ncol) VALUES (?, ?, ?, ?)',
+                [tbl, tbl, len(df), len(df.columns)],
+            )
+
+            self.execute(
+                "CREATE TEMP TABLE temp_metadata (fld__id VARCHAR, id VARCHAR, label VARCHAR, tbl VARCHAR)"
+            )
+
+            for field in metadata:
                 self.execute(
-                    f'INSERT INTO "{org}__{db}".hd_tables (id, label, nrow, ncol) VALUES (?, ?, ?, ?)',
-                    [tbl, tbl, len(df), len(df.columns)],
+                    "INSERT INTO temp_metadata VALUES (?, ?, ?, ?)",
+                    (field["fld__id"], field["id"], field["label"], tbl),
                 )
 
-                # self.execute(
-                #     "CREATE TEMP TABLE temp_metadata (fld__id VARCHAR, id VARCHAR, label VARCHAR, tbl VARCHAR)"
-                # )
+            logger.info(
+                f"temp_metadata: {self.execute('SELECT * FROM temp_metadata').fetchdf()}"
+            )
 
-                # for field in metadata:
-                #     self.execute(
-                #         "INSERT INTO temp_metadata VALUES (?, ?, ?, ?)",
-                #         (field["fld__id"], field["id"], field["label"], field["table"]),
-                #     )
+            # Insertar en hd_fields usando una consulta JOIN
+            self.execute(
+                f"""
+            INSERT INTO "{org}__{db}".hd_fields (fld__id, id, label, tbl, type)
+            SELECT
+                tm.fld__id,
+                tm.id,
+                tm.label,
+                '{tbl}' AS tbl,
+                ic.data_type AS type
+            FROM
+                temp_metadata tm
+            JOIN
+                information_schema.columns ic
+            ON
+                '{tbl}' = ic.table_name AND tm.id = ic.column_name
+            """
+            )
 
-                # # Insertar en hd_fields usando una consulta JOIN
-                # self.execute(
-                #     f"""
-                # INSERT INTO "{org}__{db}".hd_fields (fld__id, id, label, tbl, type)
-                # SELECT
-                #     tm.fld__id,
-                #     tm.id,
-                #     tm.label,
-                #     '{tbl}' AS tbl,
-                #     ic.data_type AS type
-                # FROM
-                #     temp_metadata tm
-                # JOIN
-                #     information_schema.columns ic
-                # ON
-                #     '{tbl}' = ic.table_name AND tm.id = ic.column_name
-                # """
-                # )
+            # # Eliminar la tabla temporal
+            self.execute("DROP TABLE temp_metadata")
 
-                # # Eliminar la tabla temporal
-                # self.execute("DROP TABLE temp_metadata")
+            # Commit transaction
+            self.execute("COMMIT;")
 
-                # Commit transaction
-                self.execute("COMMIT;")
-
-                logger.info(
-                    f"Table {tbl} successfully added to database {org}__{db} in MotherDuck"
-                )
-            except Exception as e:
-                # Rollback in case of error
-                self.execute("ROLLBACK;")
-                raise e
+            logger.info(
+                f"Table {tbl} successfully added to database {org}__{db} in MotherDuck"
+            )
+        except duckdb.CatalogException as e:
+            self.execute("ROLLBACK;")
+            logger.error(f"Table with name {tbl} already exists: {e}")
+            raise TableExistsError(f"Table with name {tbl} already exists: {e}")
         except duckdb.Error as e:
+            self.execute("ROLLBACK;")
             logger.error(f"Error adding table to MotherDuck: {e}")
             raise ConnectionError(f"Error adding table to MotherDuck: {e}")
 

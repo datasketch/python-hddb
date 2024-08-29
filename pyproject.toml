@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "python-hddb"
-version = "0.2.8"
+version = "0.2.9"
 description = ""
 authors = ["David Daza <03dazal@gmail.com>"]
 readme = "README.md"
@@ -12,6 +12,7 @@ pandas = "^2.2.2"
 loguru = "^0.7.2"
 python-dotenv = "^1.0.1"
 pytest = "^8.3.2"
+python-slugify = "^8.0.4"
 
 
 [tool.poetry.group.dev.dependencies]
