@@ -182,6 +182,41 @@ class HdDB:
             logger.error(f"Error retrieving data from MotherDuck: {e}")
             raise ConnectionError(f"Error retrieving data from MotherDuck: {e}")
 
+    @attach_motherduck
+    def drop_table(self, org: str, db: str, tbl: str):
+        """
+        Deletes a specific table from the database in Motherduck
+
+        :param org: Organization name
+        :param db: Database name
+        :param tbl: Table name
+        :raises ConnectionError: Si hay un error al eliminar la tabla de Motherduck
+        """
+        try:
+
+            self.execute("BEGIN TRANSACTION;")
+            try:
+
+                self.execute(f'DROP TABLE IF EXISTS "{org}__{db}"."{tbl}";')
+
+                self.execute(f'DELETE FROM "{org}__{db}".hd_tables WHERE id = ?', [tbl])
+                self.execute(
+                    f'DELETE FROM "{org}__{db}".hd_fields WHERE tbl = ?', [tbl]
+                )
+
+                self.execute("COMMIT;")
+            except Exception as e:
+
+                self.execute("ROLLBACK;")
+                raise e
+
+            logger.info(
+                f"Table {tbl} successfully deleted from database {org}__{db} in Motherduck and its record in hd_data has been removed"
+            )
+        except duckdb.Error as e:
+            logger.error(f"Error al eliminar la tabla de MotherDuck: {e}")
+            raise ConnectionError(f"Error al eliminar la tabla de MotherDuck: {e}")
+
     def close(self):
         try:
             self.conn.close()

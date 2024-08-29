@@ -43,5 +43,5 @@ def create_and_verify_database(db_client, dataframes, names, expected_table_coun
     assert len(result) == expected_table_count
     for name in names:
         assert name in tables
-    assert 'hd_fields' in tables
-    assert 'hd_tables' in tables
+    assert "hd_fields" in tables
+    assert "hd_tables" in tables
