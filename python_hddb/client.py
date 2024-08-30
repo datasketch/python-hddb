@@ -175,7 +175,7 @@ class HdDB:
             fields = self.execute(fields_query, [tbl]).fetchdf()
 
             # Convert DataFrames to JSON objects
-            data_json = data.to_dict(orient="records")
+            data_json = json.loads(data.fillna("").to_json(orient="records"))
             fields_json = fields.to_dict(orient="records")
 
             return {"data": data_json, "fields": fields_json}
@@ -340,9 +340,13 @@ class HdDB:
             """
             original_names = self.execute(original_names_query).fetchdf()
 
-            # Construct the SELECT statement with original column names
+            # Construct the SELECT statement with original column names, excluding rcd___id from the header
             select_stmt = ", ".join(
-                [f'"{row.id}" AS "{row.label}"' for _, row in original_names.iterrows()]
+                [
+                    f'"{row.id}" AS "{row.label}"'
+                    for _, row in original_names.iterrows()
+                    if row.id != "rcd___id"
+                ]
             )
 
             # Prepare the query
