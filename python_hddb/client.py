@@ -1,7 +1,8 @@
 import json
+import io
 import os
 from functools import wraps
-from typing import Any, Dict, Generator, List, Optional
+from typing import Any, Dict, Generator, List, Optional, Union
 
 import duckdb
 import pandas as pd
@@ -302,6 +303,74 @@ class HdDB:
             self.execute("ROLLBACK;")
             logger.error(f"Error adding table to MotherDuck: {e}")
             raise ConnectionError(f"Error adding table to MotherDuck: {e}")
+
+    @attach_motherduck
+    def download_data(
+        self, org: str, db: str, tbl: str, format: str = "csv", path: str = None
+    ) -> Union[str, io.BytesIO]:
+        """
+        Download data from a specified table in CSV or JSON format, using original column names.
+
+        Args:
+            org (str): The organization name.
+            db (str): The database name.
+            tbl (str): The table name.
+            format (str, optional): The output format ('csv' or 'json'). Defaults to 'csv'.
+            path (str, optional): The path where the file will be saved. If None, data will be returned as BytesIO.
+
+        Returns:
+            Union[str, io.BytesIO]: The path of the saved file if path is provided, otherwise a BytesIO object.
+
+        Raises:
+            ValueError: If an invalid format is specified.
+            duckdb.Error: If there's an error executing the query or writing the file.
+        """
+        if format not in ["csv", "json"]:
+            raise ValueError("Format must be either 'csv' or 'json'")
+
+        try:
+            # Construct the full table name
+            full_table_name = f'"{org}__{db}".{tbl}'
+
+            # Get the original column names from hd_fields
+            original_names_query = f"""
+            SELECT id, label
+            FROM "{org}__{db}".hd_fields
+            WHERE tbl = '{tbl}'
+            """
+            original_names = self.execute(original_names_query).fetchdf()
+
+            # Construct the SELECT statement with original column names
+            select_stmt = ", ".join(
+                [f'"{row.id}" AS "{row.label}"' for _, row in original_names.iterrows()]
+            )
+
+            # Prepare the query
+            query = f"SELECT {select_stmt} FROM {full_table_name}"
+
+            if path:
+                # If path is provided, save to file
+                if format == "csv":
+                    self.execute(f"COPY ({query}) TO '{path}' (HEADER, DELIMITER ',')")
+                else:  # json
+                    self.execute(f"COPY ({query}) TO '{path}' (FORMAT JSON)")
+                logger.info(f"Data from table {tbl} successfully downloaded to {path}")
+                return path
+            else:
+                # If no path is provided, return as BytesIO
+                result = self.execute(query).fetchdf()
+                buffer = io.BytesIO()
+                if format == "csv":
+                    result.to_csv(buffer, index=False)
+                else:  # json
+                    result.to_json(buffer, orient="records")
+                buffer.seek(0)
+                logger.info(f"Data from table {tbl} successfully exported to memory")
+                return buffer
+
+        except duckdb.Error as e:
+            logger.error(f"Error downloading/exporting data from table {tbl}: {e}")
+            raise
 
     def close(self):
         try:
