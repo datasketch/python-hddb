@@ -306,8 +306,8 @@ class HdDB:
 
     @attach_motherduck
     def download_data(
-        self, org: str, db: str, tbl: str, format: str = "csv", path: str = None
-    ) -> Union[str, io.BytesIO]:
+        self, org: str, db: str, tbl: str, format: str = "csv"
+    ) -> io.BytesIO:
         """
         Download data from a specified table in CSV or JSON format, using original column names.
 
@@ -316,10 +316,9 @@ class HdDB:
             db (str): The database name.
             tbl (str): The table name.
             format (str, optional): The output format ('csv' or 'json'). Defaults to 'csv'.
-            path (str, optional): The path where the file will be saved. If None, data will be returned as BytesIO.
 
         Returns:
-            Union[str, io.BytesIO]: The path of the saved file if path is provided, otherwise a BytesIO object.
+            io.BytesIO: A BytesIO object containing the exported data.
 
         Raises:
             ValueError: If an invalid format is specified.
@@ -345,36 +344,51 @@ class HdDB:
                 [
                     f'"{row.id}" AS "{row.label}"'
                     for _, row in original_names.iterrows()
-                    if row.id != "rcd___id"
+                    if row.id != "rcd_id"
                 ]
             )
 
             # Prepare the query
             query = f"SELECT {select_stmt} FROM {full_table_name}"
 
-            if path:
-                # If path is provided, save to file
-                if format == "csv":
-                    self.execute(f"COPY ({query}) TO '{path}' (HEADER, DELIMITER ',')")
-                else:  # json
-                    self.execute(f"COPY ({query}) TO '{path}' (FORMAT JSON)")
-                logger.info(f"Data from table {tbl} successfully downloaded to {path}")
-                return path
-            else:
-                # If no path is provided, return as BytesIO
-                result = self.execute(query).fetchdf()
-                buffer = io.BytesIO()
-                if format == "csv":
-                    result.to_csv(buffer, index=False)
-                else:  # json
-                    result.to_json(buffer, orient="records")
-                buffer.seek(0)
-                logger.info(f"Data from table {tbl} successfully exported to memory")
-                return buffer
+            # Execute query and return as BytesIO
+            result = self.execute(query).fetchdf()
+            buffer = io.BytesIO()
+            if format == "csv":
+                result.to_csv(buffer, index=False)
+            else:  # json
+                result.to_json(buffer, orient="records")
+            buffer.seek(0)
+            logger.info(f"Data from table {tbl} successfully exported to memory")
+            return buffer
 
         except duckdb.Error as e:
             logger.error(f"Error downloading/exporting data from table {tbl}: {e}")
             raise
+
+    @attach_motherduck
+    def update_table_data(
+        self, org: str, db: str, tbl: str, field: str, value: str, rcd_id: str
+    ) -> bool:
+        """
+        Update a specific field in a table for a given record.
+
+        :param org: Organization name
+        :param db: Database name
+        :param table: Table name
+        :param field: Field to update
+        :param value: New value for the field
+        :param rcd_id: Record ID to update
+        :return: True if update was successful
+        :raises ConnectionError: If there's an error updating data in MotherDuck
+        """
+        try:
+            query = f'UPDATE "{org}__{db}"."{tbl}" SET "{field}" = ? WHERE rcd_id = ?'
+            self.execute(query, [value, rcd_id])
+            return True
+        except duckdb.Error as e:
+            logger.error(f"Error updating data in MotherDuck: {e}")
+            raise ConnectionError(f"Error updating data in MotherDuck: {e}")
 
     def close(self):
         try:
