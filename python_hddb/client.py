@@ -83,12 +83,12 @@ class HdDB:
         try:
             # Create a temporary table with the metadata
             self.execute(
-                "CREATE TEMP TABLE temp_metadata (fld__id VARCHAR, id VARCHAR, label VARCHAR, tbl VARCHAR)"
+                "CREATE TEMP TABLE temp_metadata (fld___id VARCHAR, id VARCHAR, label VARCHAR, tbl VARCHAR)"
             )
             for field in metadata:
                 self.execute(
                     "INSERT INTO temp_metadata VALUES (?, ?, ?, ?)",
-                    (field["fld__id"], field["id"], field["label"], field["table"]),
+                    (field["fld___id"], field["id"], field["label"], field["table"]),
                 )
 
             # Join the temporary table with information_schema.columns
@@ -96,7 +96,7 @@ class HdDB:
                 """
                 CREATE TABLE hd_fields AS 
                 SELECT 
-                    tm.fld__id, 
+                    tm.fld___id, 
                     tm.id, 
                     tm.label, 
                     ic.table_name AS tbl, 
@@ -254,13 +254,13 @@ class HdDB:
             )
 
             self.execute(
-                "CREATE TEMP TABLE temp_metadata (fld__id VARCHAR, id VARCHAR, label VARCHAR, tbl VARCHAR)"
+                "CREATE TEMP TABLE temp_metadata (fld___id VARCHAR, id VARCHAR, label VARCHAR, tbl VARCHAR)"
             )
 
             for field in metadata:
                 self.execute(
                     "INSERT INTO temp_metadata VALUES (?, ?, ?, ?)",
-                    (field["fld__id"], field["id"], field["label"], tbl),
+                    (field["fld___id"], field["id"], field["label"], tbl),
                 )
 
             logger.info(
@@ -270,9 +270,9 @@ class HdDB:
             # Insertar en hd_fields usando una consulta JOIN
             self.execute(
                 f"""
-            INSERT INTO "{org}__{db}".hd_fields (fld__id, id, label, tbl, type)
+            INSERT INTO "{org}__{db}".hd_fields (fld___id, id, label, tbl, type)
             SELECT
-                tm.fld__id,
+                tm.fld___id,
                 tm.id,
                 tm.label,
                 '{tbl}' AS tbl,

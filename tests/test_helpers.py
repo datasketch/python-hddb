@@ -17,9 +17,9 @@ def test_generate_field_metadata():
     assert len(metadata) == 3
     
     for item in metadata:
-        assert set(item.keys()) == {'fld__id', 'label', 'id'}
-        assert isinstance(item['fld__id'], str)
-        assert len(item['fld__id']) == 36  # UUID length
+        assert set(item.keys()) == {'fld___id', 'label', 'id'}
+        assert isinstance(item['fld___id'], str)
+        assert len(item['fld___id']) == 36  # UUID length
         assert item['label'] in df.columns
         
     assert metadata[0]['label'] == 'Name'

@@ -19,7 +19,7 @@ def generate_field_metadata(df: pd.DataFrame) -> List[Dict[str, str]]:
     for column in df.columns:
         metadata.append(
             {
-                "fld__id": str(uuid.uuid4()),
+                "fld___id": str(uuid.uuid4()),
                 "label": column,
                 "id": slugify(column, separator="_", regex_pattern=r"[^a-z0-9_]+"),
             }
