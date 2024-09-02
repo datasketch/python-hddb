@@ -396,3 +396,24 @@ class HdDB:
             logger.info("Database connection closed")
         except duckdb.Error as e:
             logger.error(f"Error closing connection: {e}")
+
+    @attach_motherduck
+    def delete_table_data(self, org: str, db: str, tbl: str, rcd_id: str) -> bool:
+        """
+        Delete a specific row from a table.
+
+        :param org: Organization name
+        :param db: Database name
+        :param tbl: Table name
+        :param rcd_id: Record ID to delete
+        :return: True if deletion was successful
+        :raises ConnectionError: If there's an error deleting data in MotherDuck
+        """
+        try:
+            query = f'DELETE FROM "{org}__{db}"."{tbl}" WHERE rcd_id = ?'
+            self.execute(query, [rcd_id])
+            logger.info(f"Row with rcd_id {rcd_id} successfully deleted from table {tbl}")
+            return True
+        except duckdb.Error as e:
+            logger.error(f"Error deleting data in MotherDuck: {e}")
+            raise ConnectionError(f"Error deleting data in MotherDuck: {e}")
