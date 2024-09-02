@@ -410,10 +410,15 @@ class HdDB:
         :raises ConnectionError: If there's an error deleting data in MotherDuck
         """
         try:
+            self.execute("BEGIN TRANSACTION;")
             query = f'DELETE FROM "{org}__{db}"."{tbl}" WHERE rcd___id = ?'
             self.execute(query, [rcd___id])
+            query = f'UPDATE "{org}__{db}".hd_tables SET nrow = nrow - 1 WHERE id = ?'
+            self.execute(query, [tbl])
+            self.execute("COMMIT;")
             logger.info(f"Row with rcd___id {rcd___id} successfully deleted from table {tbl}")
             return True
         except duckdb.Error as e:
+            self.execute("ROLLBACK;")
             logger.error(f"Error deleting data in MotherDuck: {e}")
             raise ConnectionError(f"Error deleting data in MotherDuck: {e}")
