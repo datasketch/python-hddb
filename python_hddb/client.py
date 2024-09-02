@@ -152,7 +152,7 @@ class HdDB:
             logger.info(f"Database {org}__{db} successfully deleted from Motherduck")
         except duckdb.Error as e:
             logger.error(f"Error deleting database from MotherDuck: {e}")
-            raise ConnectionError(f"Error deleting database from MotherDuck: {e}")
+            raise QueryError(f"Error deleting database from MotherDuck: {e}")
 
     @attach_motherduck
     def get_data(self, org: str, db: str, tbl: str) -> dict:
@@ -181,7 +181,7 @@ class HdDB:
             return {"data": data_json, "fields": fields_json}
         except duckdb.Error as e:
             logger.error(f"Error retrieving data from MotherDuck: {e}")
-            raise ConnectionError(f"Error retrieving data from MotherDuck: {e}")
+            raise QueryError(f"Error retrieving data from MotherDuck: {e}")
 
     @attach_motherduck
     def drop_table(self, org: str, db: str, tbl: str):
@@ -216,7 +216,7 @@ class HdDB:
             )
         except duckdb.Error as e:
             logger.error(f"Error deleting table from MotherDuck: {e}")
-            raise ConnectionError(f"Error deleting table from MotherDuck: {e}")
+            raise QueryError(f"Error deleting table from MotherDuck: {e}")
 
     @attach_motherduck
     def add_table(self, org: str, db: str, tbl: str, df: pd.DataFrame):
@@ -302,7 +302,7 @@ class HdDB:
         except duckdb.Error as e:
             self.execute("ROLLBACK;")
             logger.error(f"Error adding table to MotherDuck: {e}")
-            raise ConnectionError(f"Error adding table to MotherDuck: {e}")
+            raise QueryError(f"Error adding table to MotherDuck: {e}")
 
     @attach_motherduck
     def download_data(
@@ -363,7 +363,7 @@ class HdDB:
             return buffer
 
         except duckdb.Error as e:
-            logger.error(f"Error downloading/exporting data from table {tbl}: {e}")
+            logger.error(f"Error downloading / exporting data from table {tbl}: {e}")
             raise
 
     @attach_motherduck
@@ -388,7 +388,7 @@ class HdDB:
             return True
         except duckdb.Error as e:
             logger.error(f"Error updating data in MotherDuck: {e}")
-            raise ConnectionError(f"Error updating data in MotherDuck: {e}")
+            raise QueryError(f"Error updating data in MotherDuck: {e}")
 
     def close(self):
         try:
@@ -421,4 +421,13 @@ class HdDB:
         except duckdb.Error as e:
             self.execute("ROLLBACK;")
             logger.error(f"Error deleting data in MotherDuck: {e}")
-            raise ConnectionError(f"Error deleting data in MotherDuck: {e}")
+            raise QueryError(f"Error deleting data in MotherDuck: {e}")
+        
+    @attach_motherduck
+    def update_hd_fields(self, org: str, db: str, fld___id: str, label: str, type: str):
+        try:
+            query = f'UPDATE "{org}__{db}".hd_fields SET label = ?, type = ? WHERE fld___id = ?'
+            self.execute(query, [label, type, fld___id])
+        except duckdb.Error as e:
+            logger.error(f"Error updating hd_fields: {e}")
+            raise QueryError(f"Error updating hd_fields: {e}")
