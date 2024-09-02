@@ -344,7 +344,7 @@ class HdDB:
                 [
                     f'"{row.id}" AS "{row.label}"'
                     for _, row in original_names.iterrows()
-                    if row.id != "rcd_id"
+                    if row.id != "rcd___id"
                 ]
             )
 
@@ -368,7 +368,7 @@ class HdDB:
 
     @attach_motherduck
     def update_table_data(
-        self, org: str, db: str, tbl: str, field: str, value: str, rcd_id: str
+        self, org: str, db: str, tbl: str, field: str, value: str, rcd___id: str
     ) -> bool:
         """
         Update a specific field in a table for a given record.
@@ -378,13 +378,13 @@ class HdDB:
         :param table: Table name
         :param field: Field to update
         :param value: New value for the field
-        :param rcd_id: Record ID to update
+        :param rcd___id: Record ID to update
         :return: True if update was successful
         :raises ConnectionError: If there's an error updating data in MotherDuck
         """
         try:
-            query = f'UPDATE "{org}__{db}"."{tbl}" SET "{field}" = ? WHERE rcd_id = ?'
-            self.execute(query, [value, rcd_id])
+            query = f'UPDATE "{org}__{db}"."{tbl}" SET "{field}" = ? WHERE rcd___id = ?'
+            self.execute(query, [value, rcd___id])
             return True
         except duckdb.Error as e:
             logger.error(f"Error updating data in MotherDuck: {e}")
@@ -398,21 +398,21 @@ class HdDB:
             logger.error(f"Error closing connection: {e}")
 
     @attach_motherduck
-    def delete_table_data(self, org: str, db: str, tbl: str, rcd_id: str) -> bool:
+    def delete_table_data(self, org: str, db: str, tbl: str, rcd___id: str) -> bool:
         """
         Delete a specific row from a table.
 
         :param org: Organization name
         :param db: Database name
         :param tbl: Table name
-        :param rcd_id: Record ID to delete
+        :param rcd___id: Record ID to delete
         :return: True if deletion was successful
         :raises ConnectionError: If there's an error deleting data in MotherDuck
         """
         try:
-            query = f'DELETE FROM "{org}__{db}"."{tbl}" WHERE rcd_id = ?'
-            self.execute(query, [rcd_id])
-            logger.info(f"Row with rcd_id {rcd_id} successfully deleted from table {tbl}")
+            query = f'DELETE FROM "{org}__{db}"."{tbl}" WHERE rcd___id = ?'
+            self.execute(query, [rcd___id])
+            logger.info(f"Row with rcd___id {rcd___id} successfully deleted from table {tbl}")
             return True
         except duckdb.Error as e:
             logger.error(f"Error deleting data in MotherDuck: {e}")
