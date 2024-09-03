@@ -100,7 +100,7 @@ class HdDB:
                     tm.id, 
                     tm.label, 
                     ic.table_name AS tbl, 
-                    ic.data_type AS type
+                    'Txt' AS type
                 FROM 
                     temp_metadata tm
                 JOIN 
@@ -416,13 +416,65 @@ class HdDB:
             query = f'UPDATE "{org}__{db}".hd_tables SET nrow = nrow - 1 WHERE id = ?'
             self.execute(query, [tbl])
             self.execute("COMMIT;")
-            logger.info(f"Row with rcd___id {rcd___id} successfully deleted from table {tbl}")
+            logger.info(
+                f"Row with rcd___id {rcd___id} successfully deleted from table {tbl}"
+            )
             return True
         except duckdb.Error as e:
             self.execute("ROLLBACK;")
             logger.error(f"Error deleting data in MotherDuck: {e}")
             raise QueryError(f"Error deleting data in MotherDuck: {e}")
-        
+
+    @attach_motherduck
+    def add_row(self, org: str, db: str, tbl: str, row: dict):
+        try:
+            columns = ", ".join(f'"{k}"' for k in row.keys())
+            placeholders = ", ".join(["?" for _ in row])
+
+            self.execute("BEGIN TRANSACTION;")
+            query = (
+                f'INSERT INTO "{org}__{db}"."{tbl}" ({columns}) VALUES ({placeholders})'
+            )
+            self.execute(query, list(row.values()))
+            self.execute(
+                f'UPDATE "{org}__{db}".hd_tables SET nrow = nrow + 1 WHERE id = ?',
+                [tbl],
+            )
+            self.execute("COMMIT;")
+            return True
+        except duckdb.Error as e:
+            self.execute("ROLLBACK;")
+            logger.error(f"Error adding row to table {tbl}: {e}")
+            raise QueryError(f"Error adding row to table {tbl}: {e}")
+
+    @attach_motherduck
+    def add_column(self, org: str, db: str, tbl: str, column: dict):
+        try:
+            self.execute("BEGIN TRANSACTION;")
+            self.execute(
+                f'ALTER TABLE "{org}__{db}"."{tbl}" ADD COLUMN "{column["slug"]}" VARCHAR'
+            )
+            self.execute(
+                f'UPDATE "{org}__{db}".hd_tables SET ncol = ncol + 1 WHERE id = ?',
+                [tbl],
+            )
+            self.execute(
+                f'INSERT INTO "{org}__{db}".hd_fields (fld___id, id, label, tbl, type) VALUES (?, ?, ?, ?, ?)',
+                [
+                    column["fld___id"],
+                    column["slug"],
+                    column["headerName"],
+                    tbl,
+                    column["type"],
+                ],
+            )
+            self.execute("COMMIT;")
+            return True
+        except duckdb.Error as e:
+            self.execute("ROLLBACK;")
+            logger.error(f"Error adding column to table {tbl}: {e}")
+            raise QueryError(f"Error adding column to table {tbl}: {e}")
+
     @attach_motherduck
     def update_hd_fields(self, org: str, db: str, fld___id: str, label: str, type: str):
         try:
