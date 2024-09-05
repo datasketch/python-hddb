@@ -2,7 +2,7 @@ import json
 import io
 import os
 from functools import wraps
-from typing import Any, Dict, Generator, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 import duckdb
 import pandas as pd
@@ -474,6 +474,29 @@ class HdDB:
             self.execute("ROLLBACK;")
             logger.error(f"Error adding column to table {tbl}: {e}")
             raise QueryError(f"Error adding column to table {tbl}: {e}")
+        
+    @attach_motherduck
+    def delete_column(self, org: str, db: str, tbl: str, column: dict):
+        try:
+            column_name = column["slug"]
+            column_id = column["fld___id"]
+            self.execute("BEGIN TRANSACTION;")
+            self.execute(f'ALTER TABLE "{org}__{db}"."{tbl}" DROP COLUMN "{column_name}"')
+            self.execute(
+                f'UPDATE "{org}__{db}".hd_tables SET ncol = ncol - 1 WHERE id = ?',
+                [tbl],
+            )
+            self.execute(
+                f'DELETE FROM "{org}__{db}".hd_fields WHERE id = ? AND tbl = ?',
+                [column_id, tbl],
+            )
+            self.execute("COMMIT;")
+            return True
+        except duckdb.Error as e:
+            self.execute("ROLLBACK;")
+            logger.error(f"Error deleting column from table {tbl}: {e}")
+            raise QueryError(f"Error deleting column from table {tbl}: {e}")
+    
 
     @attach_motherduck
     def update_hd_fields(self, org: str, db: str, fld___id: str, label: str, type: str):
