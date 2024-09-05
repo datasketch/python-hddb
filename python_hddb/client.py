@@ -487,7 +487,7 @@ class HdDB:
                 [tbl],
             )
             self.execute(
-                f'DELETE FROM "{org}__{db}".hd_fields WHERE id = ? AND tbl = ?',
+                f'DELETE FROM "{org}__{db}".hd_fields WHERE fld___id = ? AND tbl = ?',
                 [column_id, tbl],
             )
             self.execute("COMMIT;")
