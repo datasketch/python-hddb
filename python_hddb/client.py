@@ -474,14 +474,16 @@ class HdDB:
             self.execute("ROLLBACK;")
             logger.error(f"Error adding column to table {tbl}: {e}")
             raise QueryError(f"Error adding column to table {tbl}: {e}")
-        
+
     @attach_motherduck
     def delete_column(self, org: str, db: str, tbl: str, column: dict):
         try:
             column_name = column["slug"]
             column_id = column["fld___id"]
             self.execute("BEGIN TRANSACTION;")
-            self.execute(f'ALTER TABLE "{org}__{db}"."{tbl}" DROP COLUMN "{column_name}"')
+            self.execute(
+                f'ALTER TABLE "{org}__{db}"."{tbl}" DROP COLUMN "{column_name}"'
+            )
             self.execute(
                 f'UPDATE "{org}__{db}".hd_tables SET ncol = ncol - 1 WHERE id = ?',
                 [tbl],
@@ -496,7 +498,64 @@ class HdDB:
             self.execute("ROLLBACK;")
             logger.error(f"Error deleting column from table {tbl}: {e}")
             raise QueryError(f"Error deleting column from table {tbl}: {e}")
-    
+
+    @attach_motherduck
+    def upload_bulk_data(self, org: str, db: str, tbl: str, data: pd.DataFrame):
+        try:
+            # Fetch the original column names from hd_fields
+            original_columns = self.execute(
+                f'SELECT label FROM "{org}__{db}".hd_fields WHERE tbl = ? ORDER BY id',
+                [tbl],
+            ).fetchall()
+            original_column_names = [col[0] for col in original_columns]
+            data_column_names = data.columns.tolist()
+
+            # Sort both lists to ensure consistent order
+            original_column_names_sorted = sorted(original_column_names)
+            data_column_names_sorted = sorted(data_column_names)
+
+            if original_column_names_sorted != data_column_names_sorted:
+                raise ValueError(
+                    f"Data structure does not match the existing table. Expected columns: {original_column_names_sorted}, Got: {data_column_names_sorted}"
+                )
+
+            self.execute("BEGIN TRANSACTION;")
+
+            # Fetch the actual column names from the table
+            table_columns = self.execute(f'DESCRIBE "{org}__{db}"."{tbl}"').fetchall()
+            table_column_names = [col[0] for col in table_columns]
+
+            # Rename the columns in the DataFrame to match the table structure
+            column_mapping = dict(zip(original_column_names, table_column_names))
+            data_renamed = data.rename(columns=column_mapping)
+
+            # Insert data into the table
+            self.execute(
+                f'INSERT INTO "{org}__{db}"."{tbl}" SELECT * FROM data_renamed'
+            )
+
+            # Get the number of rows inserted
+            rows_inserted = len(data)
+
+            # Update the number of rows in hd_tables
+            self.execute(
+                f"""
+                UPDATE "{org}__{db}".hd_tables 
+                SET nrow = nrow + ? 
+                WHERE id = ?
+            """,
+                [rows_inserted, tbl],
+            )
+
+            self.execute("COMMIT;")
+            return True
+        except duckdb.Error as e:
+            self.execute("ROLLBACK;")
+            logger.error(f"Error uploading bulk data to table {tbl}: {e}")
+            raise QueryError(f"Error uploading bulk data to table {tbl}: {e}")
+        except ValueError as e:
+            logger.error(str(e))
+            raise QueryError(str(e))
 
     @attach_motherduck
     def update_hd_fields(self, org: str, db: str, fld___id: str, label: str, type: str):
