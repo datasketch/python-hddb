@@ -502,36 +502,58 @@ class HdDB:
     @attach_motherduck
     def upload_bulk_data(self, org: str, db: str, tbl: str, data: pd.DataFrame):
         try:
-            # Fetch the original column names from hd_fields
-            original_columns = self.execute(
-                f'SELECT label FROM "{org}__{db}".hd_fields WHERE tbl = ? ORDER BY id',
-                [tbl],
-            ).fetchall()
-            original_column_names = [col[0] for col in original_columns]
-            data_column_names = data.columns.tolist()
-
-            # Sort both lists to ensure consistent order
-            original_column_names_sorted = sorted(original_column_names)
-            data_column_names_sorted = sorted(data_column_names)
-
-            if original_column_names_sorted != data_column_names_sorted:
-                raise ValueError(
-                    f"Data structure does not match the existing table. Expected columns: {original_column_names_sorted}, Got: {data_column_names_sorted}"
-                )
-
-            self.execute("BEGIN TRANSACTION;")
-
-            # Fetch the actual column names from the table
+            # Fetch the column names and their order from the actual table
             table_columns = self.execute(f'DESCRIBE "{org}__{db}"."{tbl}"').fetchall()
             table_column_names = [col[0] for col in table_columns]
 
-            # Rename the columns in the DataFrame to match the table structure
-            column_mapping = dict(zip(original_column_names, table_column_names))
-            data_renamed = data.rename(columns=column_mapping)
+            # Fetch the column labels and ids from hd_fields
+            hd_fields = self.execute(
+                f'SELECT id, label FROM "{org}__{db}".hd_fields WHERE tbl = ?',
+                [tbl],
+            ).fetchall()
+            hd_fields_dict = {field[1]: field[0] for field in hd_fields}
+            hd_fields_reverse_dict = {field[0]: field[1] for field in hd_fields}
+
+            # Create a mapping from data column names to table column names
+            column_mapping = {}
+            for data_col in data.columns:
+                if data_col in hd_fields_dict:
+                    column_mapping[data_col] = hd_fields_dict[data_col]
+                else:
+                    column_mapping[data_col] = data_col  # Keep unmapped columns as is
+
+            logger.info(f"column_mapping: {column_mapping}")
+
+            # Check if all required columns are present in the data and identify extra columns
+            missing_columns = set(table_column_names) - set(column_mapping.values())
+            extra_columns = set(column_mapping.values()) - set(table_column_names)
+
+            if missing_columns or extra_columns:
+                error_message = []
+                if missing_columns:
+                    missing_labels = [
+                        hd_fields_reverse_dict.get(col, col) for col in missing_columns
+                    ]
+                    error_message.append(
+                        f"Missing columns in data: {', '.join(missing_labels)}"
+                    )
+                if extra_columns:
+                    extra_labels = [
+                        hd_fields_reverse_dict.get(col, col) for col in extra_columns
+                    ]
+                    error_message.append(
+                        f"Extra columns in data: {', '.join(extra_labels)}"
+                    )
+                raise ValueError(". ".join(error_message))
+
+            self.execute("BEGIN TRANSACTION;")
+
+            # Reorder and rename the columns in the DataFrame to match the table structure
+            data_reordered = data.rename(columns=column_mapping)[table_column_names]
 
             # Insert data into the table
             self.execute(
-                f'INSERT INTO "{org}__{db}"."{tbl}" SELECT * FROM data_renamed'
+                f'INSERT INTO "{org}__{db}"."{tbl}" SELECT * FROM data_reordered'
             )
 
             # Get the number of rows inserted
