@@ -497,56 +497,79 @@ class HdDB:
             raise QueryError(f"Error deleting column from table {tbl}: {e}")
 
     @attach_motherduck
-    def upload_bulk_data(self, org: str, db: str, tbl: str, data: pd.DataFrame):
+    def upload_bulk_data(
+        self, org: str, db: str, tbl: str, data: pd.DataFrame, is_json: bool = False
+    ):
         try:
             # Fetch the column names and their order from the actual table
             table_columns = self.execute(f'DESCRIBE "{org}__{db}"."{tbl}"').fetchall()
             table_column_names = [col[0] for col in table_columns]
 
-            # Fetch the column labels and ids from hd_fields
-            hd_fields = self.execute(
-                f'SELECT id, label FROM "{org}__{db}".hd_fields WHERE tbl = ?',
-                [tbl],
-            ).fetchall()
-            hd_fields_dict = {field[1]: field[0] for field in hd_fields}
-            hd_fields_reverse_dict = {field[0]: field[1] for field in hd_fields}
+            if not is_json:
+                # Fetch the column labels and ids from hd_fields
+                hd_fields = self.execute(
+                    f'SELECT id, label FROM "{org}__{db}".hd_fields WHERE tbl = ?',
+                    [tbl],
+                ).fetchall()
+                hd_fields_dict = {field[1]: field[0] for field in hd_fields}
+                hd_fields_reverse_dict = {field[0]: field[1] for field in hd_fields}
 
-            # Create a mapping from data column names to table column names
-            column_mapping = {}
-            for data_col in data.columns:
-                if data_col in hd_fields_dict:
-                    column_mapping[data_col] = hd_fields_dict[data_col]
-                else:
-                    column_mapping[data_col] = data_col  # Keep unmapped columns as is
+                # Create a mapping from data column names to table column names
+                column_mapping = {}
+                for data_col in data.columns:
+                    if data_col in hd_fields_dict:
+                        column_mapping[data_col] = hd_fields_dict[data_col]
+                    else:
+                        column_mapping[data_col] = (
+                            data_col  # Keep unmapped columns as is
+                        )
 
-            logger.info(f"column_mapping: {column_mapping}")
+                logger.info(f"column_mapping: {column_mapping}")
 
-            # Check if all required columns are present in the data and identify extra columns
-            missing_columns = set(table_column_names) - set(column_mapping.values())
-            extra_columns = set(column_mapping.values()) - set(table_column_names)
+                # Check if all required columns are present in the data and identify extra columns
+                missing_columns = set(table_column_names) - set(column_mapping.values())
+                extra_columns = set(column_mapping.values()) - set(table_column_names)
 
-            if missing_columns or extra_columns:
-                error_message = []
-                if missing_columns:
-                    missing_labels = [
-                        hd_fields_reverse_dict.get(col, col) for col in missing_columns
-                    ]
-                    error_message.append(
-                        f"Missing columns in data: {', '.join(missing_labels)}"
-                    )
-                if extra_columns:
-                    extra_labels = [
-                        hd_fields_reverse_dict.get(col, col) for col in extra_columns
-                    ]
-                    error_message.append(
-                        f"Extra columns in data: {', '.join(extra_labels)}"
-                    )
-                raise ValueError(". ".join(error_message))
+                if missing_columns or extra_columns:
+                    error_message = []
+                    if missing_columns:
+                        missing_labels = [
+                            hd_fields_reverse_dict.get(col, col)
+                            for col in missing_columns
+                        ]
+                        error_message.append(
+                            f"Missing columns in data: {', '.join(missing_labels)}"
+                        )
+                    if extra_columns:
+                        extra_labels = [
+                            hd_fields_reverse_dict.get(col, col)
+                            for col in extra_columns
+                        ]
+                        error_message.append(
+                            f"Extra columns in data: {', '.join(extra_labels)}"
+                        )
+                    raise ValueError(". ".join(error_message))
+
+                # Reorder and rename the columns in the DataFrame to match the table structure
+                data_reordered = data.rename(columns=column_mapping)[table_column_names]
+            else:
+                # Verify that all columns in the data exist in the table
+                missing_columns = set(table_column_names) - set(data.columns)
+                extra_columns = set(data.columns) - set(table_column_names)
+                if missing_columns or extra_columns:
+                    error_message = []
+                    if missing_columns:
+                        error_message.append(
+                            f"Missing columns in data: {', '.join(missing_columns)}"
+                        )
+                    if extra_columns:
+                        error_message.append(
+                            f"Extra columns in data: {', '.join(extra_columns)}"
+                        )
+                    raise ValueError(". ".join(error_message))
+                data_reordered = data[table_column_names]
 
             self.execute("BEGIN TRANSACTION;")
-
-            # Reorder and rename the columns in the DataFrame to match the table structure
-            data_reordered = data.rename(columns=column_mapping)[table_column_names]
 
             # Insert data into the table
             self.execute(
