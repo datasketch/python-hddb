@@ -1,5 +1,5 @@
-import json
 import io
+import json
 import os
 from functools import wraps
 from typing import Any, Dict, List, Optional
@@ -194,10 +194,8 @@ class HdDB:
         :raises ConnectionError: Si hay un error al eliminar la tabla de Motherduck
         """
         try:
-
             self.execute("BEGIN TRANSACTION;")
             try:
-
                 self.execute(f'DROP TABLE IF EXISTS "{org}__{db}"."{tbl}";')
 
                 self.execute(f'DELETE FROM "{org}__{db}".hd_tables WHERE id = ?', [tbl])
@@ -207,7 +205,6 @@ class HdDB:
 
                 self.execute("COMMIT;")
             except Exception as e:
-
                 self.execute("ROLLBACK;")
                 raise e
 
@@ -587,3 +584,18 @@ class HdDB:
         except duckdb.Error as e:
             logger.error(f"Error updating hd_fields: {e}")
             raise QueryError(f"Error updating hd_fields: {e}")
+
+    @attach_motherduck
+    def update_row(self, org: str, db: str, tbl: str, id: str, data: dict):
+        try:
+            # Construct the UPDATE query
+            update_query = f'UPDATE "{org}__{db}".{tbl} SET '
+            for key in data.keys():  # Removed value
+                update_query += f"{key} = ?, "
+            update_query = update_query.rstrip(", ") + " WHERE rcd___id = ?"
+
+            # Execute the UPDATE query
+            self.execute(update_query, list(data.values()) + [id])
+        except duckdb.Error as e:
+            logger.error(f"Error updating row in table {tbl}: {e}")
+            raise QueryError(f"Error updating row in table {tbl}: {e}")
