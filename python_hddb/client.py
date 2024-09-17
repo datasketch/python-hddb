@@ -65,9 +65,20 @@ class HdDB:
                 # Rename the columns in the DataFrame
                 df_renamed = df.rename(columns=columns)
 
-                # Create the table with renamed columns
-                query = f"CREATE TABLE {table_name} AS SELECT * FROM df_renamed"
-                self.execute(query)
+                # Convert all columns to string type
+                df_renamed = df_renamed.astype(str)
+
+                # Create the table with renamed columns and VARCHAR type
+                column_definitions = ", ".join(
+                    [f'"{col}" VARCHAR' for col in df_renamed.columns]
+                )
+                create_table_query = f"CREATE TABLE {table_name} ({column_definitions})"
+                self.execute(create_table_query)
+
+                # Insert data into the table
+                for _, row in df_renamed.iterrows():
+                    insert_query = f"INSERT INTO {table_name} VALUES ({', '.join(['?' for _ in row])})"
+                    self.execute(insert_query, list(row))
 
                 for field in metadata:
                     field["table"] = table_name
@@ -264,7 +275,7 @@ class HdDB:
                 f"temp_metadata: {self.execute('SELECT * FROM temp_metadata').fetchdf()}"
             )
 
-            # Insertar en hd_fields usando una consulta JOIN
+            # Insertar en hd_fields usando una consulta JOIN, pero siempre usando 'Txt' como tipo
             self.execute(
                 f"""
             INSERT INTO "{org}__{db}".hd_fields (fld___id, id, label, tbl, type)
@@ -273,17 +284,13 @@ class HdDB:
                 tm.id,
                 tm.label,
                 '{tbl}' AS tbl,
-                ic.data_type AS type
+                'Txt' AS type
             FROM
                 temp_metadata tm
-            JOIN
-                information_schema.columns ic
-            ON
-                '{tbl}' = ic.table_name AND tm.id = ic.column_name
             """
             )
 
-            # # Eliminar la tabla temporal
+            # Eliminar la tabla temporal
             self.execute("DROP TABLE temp_metadata")
 
             # Commit transaction
