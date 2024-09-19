@@ -199,6 +199,37 @@ class HdDB:
             raise QueryError(f"Error retrieving data from MotherDuck: {e}")
 
     @attach_motherduck
+    def get_record_by_id(self, org: str, db: str, tbl: str, id: str) -> dict:
+        """
+        Retrieve a record by its ID from a specified table in Motherduck
+
+        :param org: Organization name
+        :param db: Database name
+        :param tbl: Table name
+        :param id: Record ID
+        :return: Dictionary containing the record data and fields, or null values if no data found
+        """
+        try:
+            data_query = f'SELECT * FROM "{org}__{db}"."{tbl}" WHERE rcd___id = ?'
+            record = self.execute(data_query, [id]).fetchone()
+
+            if record:
+                fields_query = f'SELECT * FROM "{org}__{db}".hd_fields WHERE tbl = ?'
+                fields = self.execute(fields_query, [tbl]).fetchdf()
+                fields_json = fields.to_dict(orient="records")
+
+                # Convert record tuple to a dictionary with column names as keys
+                column_names = [field["label"] for field in fields_json]
+                record_dict = dict(zip(column_names, record))
+
+                return {"data": record_dict, "fields": fields_json}
+            else:
+                return {"data": None, "fields": None}
+        except duckdb.Error as e:
+            logger.error(f"Error retrieving record from MotherDuck: {e}")
+            raise QueryError(f"Error retrieving record from MotherDuck: {e}")
+
+    @attach_motherduck
     def drop_table(self, org: str, db: str, tbl: str):
         """
         Deletes a specific table from the database in Motherduck
