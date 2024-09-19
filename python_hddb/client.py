@@ -219,7 +219,7 @@ class HdDB:
                 fields_json = fields.to_dict(orient="records")
 
                 # Convert record tuple to a dictionary with column names as keys
-                column_names = [field["label"] for field in fields_json]
+                column_names = [field["id"] for field in fields_json]
                 record_dict = dict(zip(column_names, record))
 
                 return {"data": record_dict, "fields": fields_json}
