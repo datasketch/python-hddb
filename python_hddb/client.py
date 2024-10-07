@@ -10,6 +10,7 @@ from loguru import logger
 
 from .exceptions import ConnectionError, QueryError, TableExistsError
 from .helpers import generate_field_metadata
+from .models import FetchParams
 
 
 def attach_motherduck(func):
@@ -194,6 +195,22 @@ class HdDB:
             fields_json = fields.to_dict(orient="records")
 
             return {"data": data_json, "fields": fields_json}
+        except duckdb.Error as e:
+            logger.error(f"Error retrieving data from MotherDuck: {e}")
+            raise QueryError(f"Error retrieving data from MotherDuck: {e}")
+
+    @attach_motherduck
+    def get_data_chunk(self, org: str, db: str, tbl: str, params: FetchParams) -> dict:
+        try:
+            end_row = params.get("end_row", 0)
+            start_row = params.get("start_row", 0)
+            page_size = end_row - start_row
+
+            query = f'SELECT * FROM "{org}__{db}"."{tbl}" LIMIT {page_size} OFFSET {start_row}'
+
+            data = self.execute(query).fetchdf()
+
+            return {"data": json.loads(data.to_json(orient="records"))}
         except duckdb.Error as e:
             logger.error(f"Error retrieving data from MotherDuck: {e}")
             raise QueryError(f"Error retrieving data from MotherDuck: {e}")
@@ -679,10 +696,10 @@ class HdDB:
         try:
             query = f'SELECT fld___id, id, label, type FROM "{org}__{db}".hd_fields'
             if tbl is not None:
-                query += ' WHERE tbl = ?'
+                query += " WHERE tbl = ?"
             result = self.execute(query, [tbl] if tbl is not None else None).fetchdf()
 
-            return { "data": json.loads(result.to_json(orient="records")) }
+            return {"data": json.loads(result.to_json(orient="records"))}
         except duckdb.Error as e:
             logger.error(f"Error fetching fields from hd_fields: {e}")
             raise QueryError(f"Error fetching fields from hd_fields: {e}")
