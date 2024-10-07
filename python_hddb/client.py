@@ -664,3 +664,25 @@ class HdDB:
         except duckdb.Error as e:
             logger.error(f"Error updating row in table {tbl}: {e}")
             raise QueryError(f"Error updating row in table {tbl}: {e}")
+
+    @attach_motherduck
+    def get_fields(self, org: str, db: str, tbl: Optional[str] = None) -> list:
+        """
+        Retrieve fields from the hd_fields table for a given table.
+
+        :param org: Organization name
+        :param db: Database name
+        :param tbl: Table name
+        :return: List of fields from hd_fields table
+        :raises QueryError: If there's an error fetching fields from MotherDuck
+        """
+        try:
+            query = f'SELECT fld___id, id, label, type FROM "{org}__{db}".hd_fields'
+            if tbl is not None:
+                query += ' WHERE tbl = ?'
+            result = self.execute(query, [tbl] if tbl is not None else None).fetchdf()
+
+            return result.to_json(orient="records")
+        except duckdb.Error as e:
+            logger.error(f"Error fetching fields from hd_fields: {e}")
+            raise QueryError(f"Error fetching fields from hd_fields: {e}")
