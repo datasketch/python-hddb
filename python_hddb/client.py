@@ -210,7 +210,10 @@ class HdDB:
 
             data = self.execute(query).fetchdf()
 
-            return {"data": json.loads(data.to_json(orient="records"))}
+            count_query = f'SELECT COUNT(*) FROM "{org}__{db}"."{tbl}"'
+            count = self.execute(count_query).fetchone()[0]
+
+            return {"data": json.loads(data.to_json(orient="records")), "count": count}
         except duckdb.Error as e:
             logger.error(f"Error retrieving data from MotherDuck: {e}")
             raise QueryError(f"Error retrieving data from MotherDuck: {e}")
