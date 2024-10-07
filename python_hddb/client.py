@@ -206,7 +206,12 @@ class HdDB:
             start_row = params.get("start_row", 0)
             page_size = end_row - start_row
 
-            query = f'SELECT * FROM "{org}__{db}"."{tbl}" LIMIT {page_size} OFFSET {start_row}'
+            query = f'SELECT * FROM "{org}__{db}"."{tbl}"'
+
+            if params.get('sort'):
+                query += f" ORDER BY {params.get('sort')}"
+
+            query += f" LIMIT {page_size} OFFSET {start_row}"
 
             data = self.execute(query).fetchdf()
 
