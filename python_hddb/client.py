@@ -682,7 +682,7 @@ class HdDB:
                 query += ' WHERE tbl = ?'
             result = self.execute(query, [tbl] if tbl is not None else None).fetchdf()
 
-            return result.to_json(orient="records")
+            return { "data": json.loads(result.to_json(orient="records")) }
         except duckdb.Error as e:
             logger.error(f"Error fetching fields from hd_fields: {e}")
             raise QueryError(f"Error fetching fields from hd_fields: {e}")
