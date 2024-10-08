@@ -208,7 +208,7 @@ class HdDB:
 
             query = f'SELECT * FROM "{org}__{db}"."{tbl}"'
 
-            if params.get('sort'):
+            if params.get("sort"):
                 query += f" ORDER BY {params.get('sort')}"
 
             query += f" LIMIT {page_size} OFFSET {start_row}"
@@ -711,3 +711,19 @@ class HdDB:
         except duckdb.Error as e:
             logger.error(f"Error fetching fields from hd_fields: {e}")
             raise QueryError(f"Error fetching fields from hd_fields: {e}")
+
+    @attach_motherduck
+    def get_metadata(self, org: str, db: str, tbl: str):
+        try:
+            query = f'SELECT * FROM "{org}__{db}".hd_tables WHERE id = ?'
+            result = self.execute(query, [tbl]).fetchdf()
+            data = result.to_dict(orient="records")
+            nrow, ncol, tbl_name = (
+                data[0]["nrow"],
+                data[0]["ncol"],
+                data[0]["id"],
+            )
+            return {"nrow": nrow, "ncol": ncol, "tbl_name": tbl_name}
+        except duckdb.Error as e:
+            logger.error(f"Error fetching metadata from hd_fields: {e}")
+            raise QueryError(f"Error fetching metadata from hd_fields: {e}")
