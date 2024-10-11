@@ -17,5 +17,5 @@ db_client = HdDB()
 df = pd.DataFrame(
     data={"username": ["ddazal", "lcalderon", "pipeleon"], "age": [30, 28, 29]}
 )
-db_client.create_database(dataframes=[df], names=["users"])
+db_client.create_database(org, db, dataframes=[df], names=["users"])
 ```

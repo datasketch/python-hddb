@@ -13,7 +13,7 @@ def test_create_database_with_one_table(db_client):
     df = pd.DataFrame(
         data={"username": ["ddazal", "lcalderon", "pipeleon"], "age": [30, 28, 29]}
     )
-    create_and_verify_database(db_client, [df], ["users"], 3)
+    create_and_verify_database(db_client, [df], ["users"], 4)
 
 
 def test_create_database_with_multiple_tables(db_client):
@@ -23,7 +23,7 @@ def test_create_database_with_multiple_tables(db_client):
     courses = pd.DataFrame(
         data={"name": ["Backend with Python", "Frontend with React", "DevOps"]}
     )
-    create_and_verify_database(db_client, [users, courses], ["users", "courses"], 4)
+    create_and_verify_database(db_client, [users, courses], ["users", "courses"], 5)
 
 
 def test_create_database_value_error(db_client):
@@ -31,11 +31,11 @@ def test_create_database_value_error(db_client):
         data={"username": ["ddazal", "lcalderon", "pipeleon"], "age": [30, 28, 29]}
     )
     with pytest.raises(ValueError):
-        db_client.create_database(dataframes=[users], names=["users", "courses"])
+        db_client.create_database("demo", "demo", dataframes=[users], names=["users", "courses"])
 
 
 def create_and_verify_database(db_client, dataframes, names, expected_table_count):
-    db_client.create_database(dataframes=dataframes, names=names)
+    db_client.create_database("demo", "demo", dataframes=dataframes, names=names)
     result = db_client.execute(
         "SELECT table_name FROM information_schema.tables"
     ).fetchall()
@@ -45,3 +45,4 @@ def create_and_verify_database(db_client, dataframes, names, expected_table_coun
         assert name in tables
     assert "hd_fields" in tables
     assert "hd_tables" in tables
+    assert "hd_database" in tables

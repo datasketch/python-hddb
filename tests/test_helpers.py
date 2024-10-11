@@ -1,6 +1,7 @@
 import pandas as pd
 import pytest
 from python_hddb.helpers import generate_field_metadata
+import re
 
 def test_generate_field_metadata():
     # Create a sample DataFrame
@@ -23,10 +24,10 @@ def test_generate_field_metadata():
         assert item['label'] in df.columns
         
     assert metadata[0]['label'] == 'Name'
-    assert metadata[0]['id'] == 'name'
+    assert re.search("name_[a-zA-Z]{6}", metadata[0]['id'])
     
     assert metadata[1]['label'] == 'Age'
-    assert metadata[1]['id'] == 'age'
+    assert re.search("age_[a-zA-Z]{6}", metadata[1]['id'])
     
     assert metadata[2]['label'] == 'City of Birth'
-    assert metadata[2]['id'] == 'city_of_birth'
+    assert re.search("city_of_birth_[a-zA-Z]{6}", metadata[2]['id'])

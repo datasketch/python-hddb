@@ -41,7 +41,7 @@ class HdDB:
     ) -> duckdb.DuckDBPyConnection:
         return self.conn.execute(query, parameters)
 
-    def create_database(self, dataframes: List[pd.DataFrame], names: List[str]):
+    def create_database(self, org: str, db: str, dataframes: List[pd.DataFrame], names: List[str]):
         """
         Create in-memory database and create tables from a list of dataframes.
 
@@ -86,8 +86,24 @@ class HdDB:
                 all_metadata.extend(metadata)
 
             self.create_hd_tables()
+            self.create_hd_database(org, db, len(dataframes))
             self.create_hd_fields(all_metadata)
         except duckdb.Error as e:
+            raise QueryError(f"Error executing query: {e}")
+        
+    def create_hd_database(self, org: str, db: str, tables: int):
+        try:
+            self.execute("BEGIN TRANSACTION;")
+            
+            create_query = "CREATE TABLE hd_database (id VARCHAR, username VARCHAR, slug VARCHAR, db_created_at TIMESTAMP DEFAULT current_timestamp, db_updated_at TIMESTAMP DEFAULT current_timestamp, db_n_tables INTEGER);"
+            self.execute(create_query)
+            
+            insert_query = "INSERT INTO hd_database (id, username, slug, db_n_tables) VALUES (?, ?, ?, ?);"
+            self.execute(insert_query, [f"{org}__{db}", org, db, tables])
+            
+            self.execute("COMMIT;")
+        except duckdb.Error as e:
+            self.execute("ROLLBACK;")
             raise QueryError(f"Error executing query: {e}")
 
     # TODO: map duckdb data types to datasketch types
