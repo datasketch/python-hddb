@@ -10,7 +10,7 @@ from loguru import logger
 
 from .exceptions import ConnectionError, QueryError, TableExistsError
 from .helpers import generate_field_metadata
-from .models import FetchParams
+from .models import FetchParams, FieldsParams
 
 
 def attach_motherduck(func):
@@ -707,7 +707,7 @@ class HdDB:
             raise QueryError(f"Error updating row in table {tbl}: {e}")
 
     @attach_motherduck
-    def get_fields(self, org: str, db: str, tbl: Optional[str] = None) -> list:
+    def get_fields(self, org: str, db: str, tbl: Optional[str] = None, params: Optional[FieldsParams] = None) -> list:
         """
         Retrieve fields from the hd_fields table for a given table.
 
@@ -722,8 +722,18 @@ class HdDB:
             if tbl is not None:
                 query += " WHERE tbl = ?"
             result = self.execute(query, [tbl] if tbl is not None else None).fetchdf()
+            data = json.loads(result.to_json(orient="records"))
 
-            return {"data": json.loads(result.to_json(orient="records"))}
+            if params.with_categories:
+                for row in data:
+                    column_type, column_id = row.get('type'), row.get('id')
+                    if column_type == 'Cat':
+                        query = f'SELECT DISTINCT({column_id}) FROM "{org}__{db}".{tbl}'
+                        categories = self.execute(query).fetchall()
+                        row['categories'] = [c[0] for c in categories]
+
+
+            return {"data": data}
         except duckdb.Error as e:
             logger.error(f"Error fetching fields from hd_fields: {e}")
             raise QueryError(f"Error fetching fields from hd_fields: {e}")
