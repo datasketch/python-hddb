@@ -724,7 +724,7 @@ class HdDB:
             result = self.execute(query, [tbl] if tbl is not None else None).fetchdf()
             data = json.loads(result.to_json(orient="records"))
 
-            if params.with_categories:
+            if params and params.with_categories:
                 for row in data:
                     column_type, column_id = row.get('type'), row.get('id')
                     if column_type == 'Cat':
