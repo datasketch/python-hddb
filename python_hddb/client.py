@@ -41,7 +41,9 @@ class HdDB:
     ) -> duckdb.DuckDBPyConnection:
         return self.conn.execute(query, parameters)
 
-    def create_database(self, org: str, db: str, dataframes: List[pd.DataFrame], names: List[str]):
+    def create_database(
+        self, org: str, db: str, dataframes: List[pd.DataFrame], names: List[str]
+    ):
         """
         Create in-memory database and create tables from a list of dataframes.
 
@@ -90,17 +92,17 @@ class HdDB:
             self.create_hd_fields(all_metadata)
         except duckdb.Error as e:
             raise QueryError(f"Error executing query: {e}")
-        
+
     def create_hd_database(self, org: str, db: str, tables: int):
         try:
             self.execute("BEGIN TRANSACTION;")
-            
+
             create_query = "CREATE TABLE hd_database (id VARCHAR, username VARCHAR, slug VARCHAR, db_created_at TIMESTAMP DEFAULT current_timestamp, db_updated_at TIMESTAMP DEFAULT current_timestamp, db_n_tables INTEGER);"
             self.execute(create_query)
-            
+
             insert_query = "INSERT INTO hd_database (id, username, slug, db_n_tables) VALUES (?, ?, ?, ?);"
             self.execute(insert_query, [f"{org}__{db}", org, db, tables])
-            
+
             self.execute("COMMIT;")
         except duckdb.Error as e:
             self.execute("ROLLBACK;")
@@ -386,7 +388,7 @@ class HdDB:
 
     @attach_motherduck
     def download_data(
-        self, org: str, db: str, tbl: str, format: str = "csv"
+        self, org: str, db: str, tbl: str, format: str = "csv", fields: List[str] = None
     ) -> io.BytesIO:
         """
         Download data from a specified table in CSV or JSON format, using original column names.
@@ -396,6 +398,7 @@ class HdDB:
             db (str): The database name.
             tbl (str): The table name.
             format (str, optional): The output format ('csv' or 'json'). Defaults to 'csv'.
+            fields (List[str], optional): The fields to include in the export. Defaults to None.
 
         Returns:
             io.BytesIO: A BytesIO object containing the exported data.
@@ -419,6 +422,11 @@ class HdDB:
             """
             original_names = self.execute(original_names_query).fetchdf()
 
+            # Filter original_names if fields is provided
+            if fields is not None:
+                original_names = original_names[original_names["id"].isin(fields)]
+
+            logger.info(f"original_names: {original_names}")
             # Construct the SELECT statement with original column names, excluding rcd___id from the header
             select_stmt = ", ".join(
                 [
@@ -433,6 +441,7 @@ class HdDB:
 
             # Execute query and return as BytesIO
             result = self.execute(query).fetchdf()
+            logger.info(f"result: {result}")
             buffer = io.BytesIO()
             if format == "csv":
                 result.to_csv(buffer, index=False)
@@ -707,7 +716,13 @@ class HdDB:
             raise QueryError(f"Error updating row in table {tbl}: {e}")
 
     @attach_motherduck
-    def get_fields(self, org: str, db: str, tbl: Optional[str] = None, params: Optional[FieldsParams] = None) -> list:
+    def get_fields(
+        self,
+        org: str,
+        db: str,
+        tbl: Optional[str] = None,
+        params: Optional[FieldsParams] = None,
+    ) -> list:
         """
         Retrieve fields from the hd_fields table for a given table.
 
@@ -726,12 +741,11 @@ class HdDB:
 
             if params and params.with_categories:
                 for row in data:
-                    column_type, column_id = row.get('type'), row.get('id')
-                    if column_type == 'Cat':
+                    column_type, column_id = row.get("type"), row.get("id")
+                    if column_type == "Cat":
                         query = f'SELECT DISTINCT({column_id}) FROM "{org}__{db}".{tbl}'
                         categories = self.execute(query).fetchall()
-                        row['categories'] = [c[0] for c in categories]
-
+                        row["categories"] = [c[0] for c in categories]
 
             return {"data": data}
         except duckdb.Error as e:
