@@ -328,10 +328,19 @@ class HdDB:
             # Begin transaction
             self.execute("BEGIN TRANSACTION;")
 
-            # Create the new table
-            self.execute(
-                f'CREATE TABLE "{org}__{db}"."{tbl}" AS SELECT * FROM df_renamed'
+            # Create the new table with all columns as VARCHAR
+            column_definitions = ", ".join(
+                [f'"{col}" VARCHAR' for col in df_renamed.columns]
             )
+            create_table_query = (
+                f'CREATE TABLE "{org}__{db}"."{tbl}" ({column_definitions})'
+            )
+            self.execute(create_table_query)
+
+            # Insert data into the new table
+            for _, row in df_renamed.iterrows():
+                insert_query = f'INSERT INTO "{org}__{db}"."{tbl}" VALUES ({", ".join(["?" for _ in row])})'
+                self.execute(insert_query, list(row))
 
             # Insert into hd_tables
             self.execute(
@@ -426,7 +435,6 @@ class HdDB:
             if fields is not None:
                 original_names = original_names[original_names["id"].isin(fields)]
 
-            logger.info(f"original_names: {original_names}")
             # Construct the SELECT statement with original column names, excluding rcd___id from the header
             select_stmt = ", ".join(
                 [
@@ -441,7 +449,7 @@ class HdDB:
 
             # Execute query and return as BytesIO
             result = self.execute(query).fetchdf()
-            logger.info(f"result: {result}")
+
             buffer = io.BytesIO()
             if format == "csv":
                 result.to_csv(buffer, index=False)
