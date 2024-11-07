@@ -71,6 +71,10 @@ class HdDB:
                 # Convert all columns to string type
                 df_renamed = df_renamed.astype(str)
 
+                df_renamed = df_renamed.astype(str).replace(
+                    {"nan": "", "NaN": "", "None": ""}
+                )
+
                 # Create the table with renamed columns and VARCHAR type
                 column_definitions = ", ".join(
                     [f'"{col}" VARCHAR' for col in df_renamed.columns]
@@ -207,7 +211,7 @@ class HdDB:
             # Convert DataFrames to JSON objects
             data_json = json.loads(
                 data.fillna("")
-                .replace({"NaN": "", "nan": ""})
+                .replace({"nan": "", "NaN": "", "None": ""})
                 .to_json(orient="records")
             )
             fields_json = fields.to_dict(orient="records")
@@ -324,6 +328,10 @@ class HdDB:
 
             # Rename the columns in the DataFrame
             df_renamed = df.rename(columns=columns)
+
+            df_renamed = df_renamed.astype(str).replace(
+                {"nan": "", "NaN": "", "None": ""}
+            )
 
             # Begin transaction
             self.execute("BEGIN TRANSACTION;")
