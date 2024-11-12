@@ -783,3 +783,57 @@ class HdDB:
         except duckdb.Error as e:
             logger.error(f"Error fetching metadata from hd_fields: {e}")
             raise QueryError(f"Error fetching metadata from hd_fields: {e}")
+        
+    @attach_motherduck
+    def update_records(self, org: str, db: str, tbl: str, updates: List[Dict[str, Any]]) -> bool:
+        """
+        Update multiple records in a table in a single transaction.
+        
+        Args:
+            org (str): Organization name
+            db (str): Database name
+            tbl (str): Table name
+            updates (List[Dict[str, Any]]): List of dictionaries containing updates.
+                Each dictionary must have:
+                - 'rcd___id': The record ID to update
+                - Any other key-value pairs representing the columns to update
+        
+        Returns:
+            bool: True if updates were successful
+        
+        Raises:
+            QueryError: If there's an error updating the records
+            ValueError: If updates list is empty or missing required fields
+        """
+        if not updates:
+            raise ValueError("Updates list cannot be empty")
+        
+        try:
+            self.execute("BEGIN TRANSACTION;")
+            
+            for update in updates:
+                if 'rcd___id' not in update:
+                    raise ValueError("Each update must contain 'rcd___id'")
+                
+                record_id = update['rcd___id']
+                # Remove rcd___id from the update data
+                update_data = {k: v for k, v in update.items() if k != 'rcd___id'}
+                
+                if not update_data:
+                    continue  # Skip if no fields to update
+                
+                # Construct the UPDATE query
+                set_clause = ", ".join([f'"{k}" = ?' for k in update_data.keys()])
+                query = f'UPDATE "{org}__{db}"."{tbl}" SET {set_clause} WHERE rcd___id = ?'
+                
+                # Execute the UPDATE query with all values plus the record_id
+                self.execute(query, list(update_data.values()) + [record_id])
+            
+            self.execute("COMMIT;")
+            logger.info(f"Successfully updated {len(updates)} records in table {tbl}")
+            return True
+            
+        except duckdb.Error as e:
+            self.execute("ROLLBACK;")
+            logger.error(f"Error updating records in table {tbl}: {e}")
+            raise QueryError(f"Error updating records in table {tbl}: {e}")
