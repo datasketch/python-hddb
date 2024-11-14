@@ -65,27 +65,23 @@ class HdDB:
                 # Create a mapping of original column names to new IDs
                 columns = {field["label"]: field["id"] for field in metadata}
 
-                # Rename the columns in the DataFrame
-                df_renamed = df.rename(columns=columns)
-
-                # Convert all columns to string type
-                df_renamed = df_renamed.astype(str)
-
-                df_renamed = df_renamed.astype(str).replace(
-                    {"nan": "", "NaN": "", "None": ""}
+                # Rename the columns and convert to string, handling null values
+                df_renamed = (
+                    df.rename(columns=columns)
+                    .astype(str)
+                    .replace({"nan": "", "NaN": "", "None": ""})
                 )
 
-                # Create the table with renamed columns and VARCHAR type
+                # Create the table with VARCHAR columns
                 column_definitions = ", ".join(
-                    [f'"{col}" VARCHAR' for col in df_renamed.columns]
+                    f'"{col}" VARCHAR' for col in df_renamed.columns
                 )
+
                 create_table_query = f"CREATE TABLE {table_name} ({column_definitions})"
                 self.execute(create_table_query)
 
-                # Insert data into the table
-                for _, row in df_renamed.iterrows():
-                    insert_query = f"INSERT INTO {table_name} VALUES ({', '.join(['?' for _ in row])})"
-                    self.execute(insert_query, list(row))
+                # Insert all data at once using the DataFrame directly
+                self.execute(f"INSERT INTO {table_name} SELECT * FROM df_renamed")
 
                 for field in metadata:
                     field["table"] = table_name
@@ -323,14 +319,11 @@ class HdDB:
             # Generate metadata for the new table
             metadata = generate_field_metadata(df)
 
-            # Create a mapping of original column names to new IDs
-            columns = {field["label"]: field["id"] for field in metadata}
-
-            # Rename the columns in the DataFrame
-            df_renamed = df.rename(columns=columns)
-
-            df_renamed = df_renamed.astype(str).replace(
-                {"nan": "", "NaN": "", "None": ""}
+            # Create a mapping of original column names to new IDs and rename columns
+            df_renamed = (
+                df.rename(columns={field["label"]: field["id"] for field in metadata})
+                .astype(str)
+                .replace({"nan": "", "NaN": "", "None": ""})
             )
 
             # Begin transaction
@@ -340,15 +333,16 @@ class HdDB:
             column_definitions = ", ".join(
                 [f'"{col}" VARCHAR' for col in df_renamed.columns]
             )
+
             create_table_query = (
                 f'CREATE TABLE "{org}__{db}"."{tbl}" ({column_definitions})'
             )
+
             self.execute(create_table_query)
 
-            # Insert data into the new table
-            for _, row in df_renamed.iterrows():
-                insert_query = f'INSERT INTO "{org}__{db}"."{tbl}" VALUES ({", ".join(["?" for _ in row])})'
-                self.execute(insert_query, list(row))
+            insert_query = f'INSERT INTO "{org}__{db}"."{tbl}" SELECT * FROM df_renamed'
+
+            self.execute(insert_query)
 
             # Insert into hd_tables
             self.execute(
@@ -391,14 +385,15 @@ class HdDB:
             # Commit transaction
             self.execute("COMMIT;")
 
-            logger.info(
-                f"Table {tbl} successfully added to database {org}__{db} in MotherDuck"
-            )
-        except duckdb.CatalogException as e:
+        except (duckdb.CatalogException, duckdb.Error) as e:
             self.execute("ROLLBACK;")
-            logger.error(f"Table with name {tbl} already exists: {e}")
-            raise TableExistsError(f"Table with name {tbl} already exists: {e}")
-        except duckdb.Error as e:
+            if isinstance(e, duckdb.CatalogException):
+                logger.error(f"Table with name {tbl} already exists: {e}")
+                raise TableExistsError(f"Table with name {tbl} already exists: {e}")
+            else:
+                logger.error(f"Error adding table to MotherDuck: {e}")
+                raise QueryError(f"Error adding table to MotherDuck: {e}")
+        except Exception as e:
             self.execute("ROLLBACK;")
             logger.error(f"Error adding table to MotherDuck: {e}")
             raise QueryError(f"Error adding table to MotherDuck: {e}")
@@ -783,12 +778,14 @@ class HdDB:
         except duckdb.Error as e:
             logger.error(f"Error fetching metadata from hd_fields: {e}")
             raise QueryError(f"Error fetching metadata from hd_fields: {e}")
-        
+
     @attach_motherduck
-    def update_records(self, org: str, db: str, tbl: str, updates: List[Dict[str, Any]]) -> bool:
+    def update_records(
+        self, org: str, db: str, tbl: str, updates: List[Dict[str, Any]]
+    ) -> bool:
         """
         Update multiple records in a table in a single transaction.
-        
+
         Args:
             org (str): Organization name
             db (str): Database name
@@ -797,42 +794,44 @@ class HdDB:
                 Each dictionary must have:
                 - 'rcd___id': The record ID to update
                 - Any other key-value pairs representing the columns to update
-        
+
         Returns:
             bool: True if updates were successful
-        
+
         Raises:
             QueryError: If there's an error updating the records
             ValueError: If updates list is empty or missing required fields
         """
         if not updates:
             raise ValueError("Updates list cannot be empty")
-        
+
         try:
             self.execute("BEGIN TRANSACTION;")
-            
+
             for update in updates:
-                if 'rcd___id' not in update:
+                if "rcd___id" not in update:
                     raise ValueError("Each update must contain 'rcd___id'")
-                
-                record_id = update['rcd___id']
+
+                record_id = update["rcd___id"]
                 # Remove rcd___id from the update data
-                update_data = {k: v for k, v in update.items() if k != 'rcd___id'}
-                
+                update_data = {k: v for k, v in update.items() if k != "rcd___id"}
+
                 if not update_data:
                     continue  # Skip if no fields to update
-                
+
                 # Construct the UPDATE query
                 set_clause = ", ".join([f'"{k}" = ?' for k in update_data.keys()])
-                query = f'UPDATE "{org}__{db}"."{tbl}" SET {set_clause} WHERE rcd___id = ?'
-                
+                query = (
+                    f'UPDATE "{org}__{db}"."{tbl}" SET {set_clause} WHERE rcd___id = ?'
+                )
+
                 # Execute the UPDATE query with all values plus the record_id
                 self.execute(query, list(update_data.values()) + [record_id])
-            
+
             self.execute("COMMIT;")
             logger.info(f"Successfully updated {len(updates)} records in table {tbl}")
             return True
-            
+
         except duckdb.Error as e:
             self.execute("ROLLBACK;")
             logger.error(f"Error updating records in table {tbl}: {e}")
