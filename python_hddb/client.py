@@ -836,3 +836,55 @@ class HdDB:
             self.execute("ROLLBACK;")
             logger.error(f"Error updating records in table {tbl}: {e}")
             raise QueryError(f"Error updating records in table {tbl}: {e}")
+
+    @attach_motherduck
+    def clear_column_values(self, org: str, db: str, tbl: str, column: str, value: str) -> bool:
+        """
+        Clear values in a specific column that match a given value.
+        
+        Args:
+            org (str): Organization name
+            db (str): Database name
+            tbl (str): Table name
+            column (str): Column label to clear values from
+            value (str): Value to match and clear
+        
+        Returns:
+            bool: True if operation was successful
+            
+        Raises:
+            QueryError: If there's an error executing the query
+        """
+        try:
+            # Verify if the column exists by querying hd_fields
+            check_query = f"""
+                SELECT id 
+                FROM "{org}__{db}".hd_fields 
+                WHERE tbl = ? AND id = ?
+            """
+            result = self.execute(check_query, [tbl, column]).fetchone()
+            
+            if not result:
+                raise QueryError(f"Column '{column}' not found in table '{tbl}'")
+                
+            column_id = result[0]
+            
+            # Begin transaction
+            self.execute("BEGIN TRANSACTION;")
+            
+            # Update the values to empty string where they match
+            update_query = f"""
+                UPDATE "{org}__{db}"."{tbl}" 
+                SET "{column_id}" = ''
+                WHERE "{column_id}" = ?
+            """
+            self.execute(update_query, [value])
+            
+            self.execute("COMMIT;")
+            logger.info(f"Successfully cleared values matching '{value}' in column '{column}' of table '{tbl}'")
+            return True
+            
+        except (duckdb.Error, Exception) as e:
+            self.execute("ROLLBACK;")
+            logger.error(f"Error clearing values in column: {e}")
+            raise QueryError(f"Error clearing values in column: {e}")
