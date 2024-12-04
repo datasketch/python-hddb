@@ -10,7 +10,7 @@ from loguru import logger
 
 from .exceptions import ConnectionError, QueryError, TableExistsError
 from .helpers import generate_field_metadata
-from .models import FetchParams, FieldsParams
+from .models import FetchParams, FieldsParams, TextFilterType, FilterModel
 
 
 def attach_motherduck(func):
@@ -219,27 +219,152 @@ class HdDB:
 
     @attach_motherduck
     def get_data_chunk(self, org: str, db: str, tbl: str, params: FetchParams) -> dict:
+        """
+        Get a chunk of data with advanced sorting, filtering and grouping capabilities.
+
+        Args:
+            org (str): Organization name
+            db (str): Database name
+            tbl (str): Table name
+            params (FetchParams): Query parameters including:
+                - start_row (int): Starting row for pagination
+                - end_row (int): Ending row for pagination
+                - sort (str): Sorting condition
+                - filter_model (Dict[str, FilterModel]): Filter conditions
+                - group (str): Grouping column
+
+        Returns:
+            dict: Contains:
+                - data: List of records
+                - count: Total number of records
+        """
         try:
             end_row = params.get("end_row", 0)
             start_row = params.get("start_row", 0)
             page_size = end_row - start_row
 
-            query = f'SELECT * FROM "{org}__{db}"."{tbl}"'
+            logger.info(f"Params: {params}")
 
-            if params.get("sort"):
-                query += f" ORDER BY {params.get('sort')}"
+            select_clause = self._build_select_clause(params)
+            from_clause = f'FROM "{org}__{db}"."{tbl}"'
+            where_clause = self._build_where_clause(params)
+            group_clause = self._build_group_clause(params)
+            order_clause = self._build_order_clause(params)
+            limit_clause = f"LIMIT {page_size} OFFSET {start_row}"
 
-            query += f" LIMIT {page_size} OFFSET {start_row}"
+            query = (
+                f"{select_clause} {from_clause} {where_clause} "
+                f"{group_clause} {order_clause} {limit_clause}"
+            )
 
+            logger.info(f"Executing query: {query}")
             data = self.execute(query).fetchdf()
 
-            count_query = f'SELECT COUNT(*) FROM "{org}__{db}"."{tbl}"'
-            count = self.execute(count_query).fetchone()[0]
+            count = self._get_total_count(org, db, tbl, params)
 
             return {"data": json.loads(data.to_json(orient="records")), "count": count}
         except duckdb.Error as e:
             logger.error(f"Error retrieving data from MotherDuck: {e}")
             raise QueryError(f"Error retrieving data from MotherDuck: {e}")
+
+    def _build_select_clause(self, params: FetchParams) -> str:
+        """Builds the SELECT clause"""
+        group = params.get("group")
+        if group:
+            group_columns = [
+                col.strip().split()[0] for col in params["group"].split(",")
+            ]
+            select_parts = [f'"{col}"' for col in group_columns]
+            select_parts.append("COUNT(*) as group_count")
+            return "SELECT " + ", ".join(select_parts)
+        return "SELECT *"
+
+    def _build_where_clause(self, params: FetchParams) -> str:
+        """Builds the WHERE clause based on the filter_model"""
+        filter_model = params.get("filter_model")
+        if not filter_model:
+            return ""
+
+        conditions = []
+        for key, filter_model in filter_model.items():
+            condition = self._create_filter_condition(key, filter_model)
+            if condition:
+                conditions.append(condition)
+
+        return " WHERE " + " AND ".join(conditions) if conditions else ""
+
+    def _create_filter_condition(self, key: str, filter_model: FilterModel) -> str:
+        """Creates the SQL condition for a specific filter"""
+        filter_value = filter_model.filter.replace("'", "''")  # Escape single quotes
+
+        match filter_model.type:
+            case TextFilterType.EQUALS:
+                return f"\"{key}\" = '{filter_value}'"
+            case TextFilterType.NOT_EQUAL:
+                return f"\"{key}\" != '{filter_value}'"
+            case TextFilterType.CONTAINS:
+                return f"\"{key}\" LIKE '%{filter_value}%'"
+            case TextFilterType.NOT_CONTAINS:
+                return f"\"{key}\" NOT LIKE '%{filter_value}%'"
+            case TextFilterType.STARTS_WITH:
+                return f"\"{key}\" LIKE '{filter_value}%'"
+            case TextFilterType.ENDS_WITH:
+                return f"\"{key}\" LIKE '%{filter_value}'"
+            case TextFilterType.IS_NULL:
+                return f'"{key}" IS NULL'
+            case TextFilterType.IS_NOT_NULL:
+                return f'"{key}" IS NOT NULL'
+            case _:
+                logger.warning(f"Unknown filter type: {filter_model.type}")
+                return ""
+
+    def _build_group_clause(self, params: FetchParams) -> str:
+        """Builds the GROUP BY clause"""
+        group = params.get("group")
+        if not group:
+            return ""
+
+        # Extract only the column names without the direction
+        group_parts = [part.strip().split()[0] for part in group.split(",")]
+        return "GROUP BY " + ", ".join(f'"{col}"' for col in group_parts)
+
+    def _build_order_clause(self, params: FetchParams) -> str:
+        """Builds the ORDER BY clause"""
+        group = params.get("group")
+        sort = params.get("sort")
+        if group:
+            # Process each part of the group to extract column and direction
+            order_parts = []
+            for part in group.split(","):
+                part = part.strip().split()
+                column = part[0]
+                # Si se especifica dirección, usarla; si no, usar ASC por defecto
+                direction = part[1].upper() if len(part) > 1 else "ASC"
+                # Validar que la dirección sea válida
+                if direction not in ["ASC", "DESC"]:
+                    direction = "ASC"
+                order_parts.append(f'"{column}" {direction}')
+
+            return "ORDER BY " + ", ".join(order_parts)
+        elif sort:
+            return f"ORDER BY {sort}"
+        return ""
+
+    def _get_total_count(self, org: str, db: str, tbl: str, params: dict) -> int:
+        """Gets the total count of records"""
+        if params.get("group"):
+            # Only take the column name, ignoring the direction (asc/desc)
+            group_cols = params["group"].split(",")[0].strip().split()[0]
+            base_query = (
+                f'SELECT COUNT(DISTINCT "{group_cols}") FROM "{org}__{db}"."{tbl}"'
+            )
+        else:
+            base_query = f'SELECT COUNT(*) FROM "{org}__{db}"."{tbl}"'
+
+        where_clause = self._build_where_clause(params)
+        count_query = base_query + where_clause
+
+        return self.execute(count_query).fetchone()[0]
 
     @attach_motherduck
     def get_record_by_id(self, org: str, db: str, tbl: str, id: str) -> dict:
@@ -838,20 +963,22 @@ class HdDB:
             raise QueryError(f"Error updating records in table {tbl}: {e}")
 
     @attach_motherduck
-    def clear_column_values(self, org: str, db: str, tbl: str, column: str, value: str) -> bool:
+    def clear_column_values(
+        self, org: str, db: str, tbl: str, column: str, value: str
+    ) -> bool:
         """
         Clear values in a specific column that match a given value.
-        
+
         Args:
             org (str): Organization name
             db (str): Database name
             tbl (str): Table name
             column (str): Column label to clear values from
             value (str): Value to match and clear
-        
+
         Returns:
             bool: True if operation was successful
-            
+
         Raises:
             QueryError: If there's an error executing the query
         """
@@ -863,15 +990,15 @@ class HdDB:
                 WHERE tbl = ? AND id = ?
             """
             result = self.execute(check_query, [tbl, column]).fetchone()
-            
+
             if not result:
                 raise QueryError(f"Column '{column}' not found in table '{tbl}'")
-                
+
             column_id = result[0]
-            
+
             # Begin transaction
             self.execute("BEGIN TRANSACTION;")
-            
+
             # Update the values to empty string where they match
             update_query = f"""
                 UPDATE "{org}__{db}"."{tbl}" 
@@ -879,11 +1006,13 @@ class HdDB:
                 WHERE "{column_id}" = ?
             """
             self.execute(update_query, [value])
-            
+
             self.execute("COMMIT;")
-            logger.info(f"Successfully cleared values matching '{value}' in column '{column}' of table '{tbl}'")
+            logger.info(
+                f"Successfully cleared values matching '{value}' in column '{column}' of table '{tbl}'"
+            )
             return True
-            
+
         except (duckdb.Error, Exception) as e:
             self.execute("ROLLBACK;")
             logger.error(f"Error clearing values in column: {e}")
