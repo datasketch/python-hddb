@@ -247,8 +247,8 @@ class HdDB:
         """
         try:
 
-            end_row = params.get("end_row", 0)
-            start_row = params.get("start_row", 0)
+            end_row = params.end_row or 0
+            start_row = params.start_row or 0
             page_size = end_row - start_row
 
             select_sql = build_select_sql(params)
