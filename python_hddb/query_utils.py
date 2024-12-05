@@ -2,9 +2,9 @@
 from .models import FetchParams
 
 
-def build_select_sql(fp: FetchParams) -> str:
+def build_select_sql(params: FetchParams) -> str:
     """Build SELECT clause based on grouping parameters"""
-    params = FetchParams(**fp)
+
     row_group_cols = params.row_group_cols
     group_keys = params.group_keys
     if is_doing_grouping(params):
@@ -16,13 +16,11 @@ def build_select_sql(fp: FetchParams) -> str:
     return "SELECT *"
 
 
-def build_where_sql(fp: FetchParams) -> str:
+def build_where_sql(params: FetchParams) -> str:
     """Build WHERE clause for expanded groups"""
-    params = FetchParams(**fp)
     group_keys = params.group_keys
     row_group_cols = params.row_group_cols
     where_parts = []
-
     for idx, key in enumerate(group_keys):
         col = row_group_cols[idx].field
         where_parts.append(f"\"{col}\" = '{key}'")
@@ -30,9 +28,8 @@ def build_where_sql(fp: FetchParams) -> str:
     return " WHERE " + " AND ".join(where_parts) if where_parts else ""
 
 
-def build_group_sql(fp: FetchParams) -> str:
+def build_group_sql(params: FetchParams) -> str:
     """Build GROUP BY clause"""
-    params = FetchParams(**fp)
     row_group_cols = params.row_group_cols
     group_keys = params.group_keys
     if is_doing_grouping(params):
@@ -43,9 +40,8 @@ def build_group_sql(fp: FetchParams) -> str:
     return ""
 
 
-def build_order_sql(fp: FetchParams) -> str:
+def build_order_sql(params: FetchParams) -> str:
     """Build ORDER BY clause"""
-    params = FetchParams(**fp)
     sort = params.sort
     if sort:
         return f" ORDER BY {sort}"
