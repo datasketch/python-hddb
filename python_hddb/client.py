@@ -261,6 +261,7 @@ class HdDB:
             query = f"{select_sql} {from_sql} {where_sql} {group_sql} {order_sql} {limit_sql}"
 
             logger.info(f"Executing query: {query}")
+
             data = self.execute(query).fetchdf()
 
             count_query = f'SELECT COUNT(*) FROM "{org}__{db}"."{tbl}"'
