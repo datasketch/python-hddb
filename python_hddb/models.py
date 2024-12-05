@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import List, Dict, Optional
+from typing import Dict, Optional, List
 from pydantic import BaseModel
 
 
@@ -20,9 +20,14 @@ class TextFilter(BaseModel):
 
 
 class FilterModel(BaseModel):
-    filterType: str = "text"  # Por ahora solo texto
+    filterType: str = "text"
     type: TextFilterType
     filter: str
+
+
+class RowGroupCol(BaseModel):
+    field: str
+    id: str
 
 
 class FetchParams(BaseModel):
@@ -30,7 +35,8 @@ class FetchParams(BaseModel):
     end_row: int
     sort: Optional[str] = None
     filter_model: Optional[Dict[str, FilterModel]] = None
-    group: Optional[str] = None
+    row_group_cols: Optional[List[RowGroupCol]] = []
+    group_keys: Optional[List[str]] = []
 
 
 class FieldsParams(BaseModel):
