@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "python-hddb"
-version = "1.4.5"
+version = "1.4.6"
 description = ""
 authors = ["David Daza <03dazal@gmail.com>"]
 readme = "README.md"

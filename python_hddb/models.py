@@ -25,17 +25,12 @@ class FilterModel(BaseModel):
     filter: str
 
 
-class RowGroupCol(BaseModel):
-    field: str
-    id: str
-
-
 class FetchParams(BaseModel):
     start_row: int
     end_row: int
     sort: Optional[str] = None
     filter_model: Optional[Dict[str, FilterModel]] = None
-    row_group_cols: Optional[List[RowGroupCol]] = []
+    row_group_cols: Optional[List[str]] = []
     group_keys: Optional[List[str]] = []
 
 
