@@ -44,8 +44,20 @@ def build_group_sql(params: FetchParams) -> str:
 def build_order_sql(params: FetchParams) -> str:
     """Build ORDER BY clause"""
     sort = params.sort
+    if is_doing_grouping(params) and sort:
+        order_parts = [part.strip() for part in sort.split(",")]
+        filtered_order_parts = []
+        for part in order_parts:
+            column_name = part.split()[0]
+            if column_name in params.row_group_cols:
+                filtered_order_parts.append(part)
+
+        if filtered_order_parts:
+            current_order = filtered_order_parts[len(params.group_keys)]
+            return f"ORDER BY {current_order}"
+
     if sort:
-        return f" ORDER BY {sort}"
+        return f"ORDER BY {sort}"
     return ""
 
 
