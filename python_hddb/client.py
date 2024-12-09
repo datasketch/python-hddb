@@ -16,6 +16,7 @@ from .query_utils import (
     build_where_sql,
     build_group_sql,
     build_order_sql,
+    build_count_sql,
 )
 
 
@@ -259,13 +260,12 @@ class HdDB:
             limit_sql = f" LIMIT {page_size} OFFSET {start_row}"
 
             query = f"{select_sql} {from_sql} {where_sql} {group_sql} {order_sql} {limit_sql}"
-
-            logger.info(f"Executing query: {query}")
-
             data = self.execute(query).fetchdf()
 
-            count_query = f'SELECT COUNT(*) FROM "{org}__{db}"."{tbl}"'
+            count_query = build_count_sql(params, from_sql, where_sql)
             count = self.execute(count_query).fetchone()[0]
+
+            logger.info(f"Executing query: {query}")
 
             return {"data": json.loads(data.to_json(orient="records")), "count": count}
 

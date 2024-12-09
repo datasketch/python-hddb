@@ -36,6 +36,7 @@ def build_group_sql(params: FetchParams) -> str:
         cols_to_group_by = []
         row_group_col = row_group_cols[len(group_keys)]
         cols_to_group_by.append(row_group_col)
+
         return f'GROUP BY {", ".join(cols_to_group_by)}'
     return ""
 
@@ -52,3 +53,28 @@ def is_doing_grouping(params: FetchParams) -> bool:
     row_group_cols = params.row_group_cols
     group_keys = params.group_keys
     return len(row_group_cols) > len(group_keys)
+
+
+def build_count_sql(params: FetchParams, from_sql: str, where_sql: str) -> str:
+    """
+    Build COUNT query based on grouping parameters
+
+    Args:
+        params (FetchParams): Query parameters
+        from_sql (str): FROM clause
+        where_sql (str): WHERE clause
+
+    Returns:
+        str: Complete COUNT query
+    """
+    if is_doing_grouping(params):
+        row_group_col = params.row_group_cols[len(params.group_keys)]
+        return f"""
+            SELECT COUNT(*) 
+            FROM (
+                SELECT DISTINCT {row_group_col} 
+                {from_sql} 
+                {where_sql}
+            )
+        """
+    return f"SELECT COUNT(*) {from_sql} {where_sql}"
