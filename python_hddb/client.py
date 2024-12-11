@@ -257,7 +257,7 @@ class HdDB:
             where_sql = build_where_sql(params)
             group_sql = build_group_sql(params)
             order_sql = build_order_sql(params)
-            limit_sql = f" LIMIT {page_size} OFFSET {start_row}"
+            limit_sql = f"LIMIT {page_size} OFFSET {start_row}"
 
             query = f"{select_sql} {from_sql} {where_sql} {group_sql} {order_sql} {limit_sql}"
             data = self.execute(query).fetchdf()
